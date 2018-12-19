@@ -18,12 +18,14 @@ endif()
 set( LIB_NAME "OpenARK" )
 set( DEMO_NAME "OpenARK_hand_demo" )
 set( AVATAR_DEMO_NAME "OpenARK_avatar_demo")
+set( SLAM_DEMO_NAME "OpenARK_SLAM_demo")
 set( DATA_RECORDING_NAME "OpenARK_data_recording")
 set( TEST_NAME "OpenARK_test" )
 set( UNITY_PLUGIN_NAME "UnityPlugin" )
 
 option( BUILD_DEMO "BUILD_DEMO" ON )
 option( BUILD_AVATAR_DEMO "BUILD_AVATAR_DEMO" ON)
+option( BUILD_SLAM_DEMO "BUILD_SLAM_DEMO" ON)
 option( BUILD_DATA_RECORDING "BUILD_DATA_RECORDING" ON)
 option( BUILD_TESTS "BUILD_TESTS" OFF )
 option( BUILD_UNITY_PLUGIN "BUILD_UNITY_PLUGIN" ON )
@@ -56,6 +58,53 @@ find_package( OpenCV REQUIRED )
 if( OpenCV_FOUND )
    message( STATUS "Found OpenCV: ${OpenCV_INCLUDE_DIRS}" )
 endif( OpenCV_FOUND )
+
+if(BUILD_SLAM_DEMO)
+  # require Okvis
+  find_package( Okvis 1.1 REQUIRED )
+  include_directories(${OKVIS_INCLUDE_DIRS})
+  message(STATUS "Found Okvis: ${OKVIS_INCLUDE_DIRS}")
+
+  # require glog (should come with Okvis)
+  find_package( Glog REQUIRED )
+  message(STATUS "Found Glog: ${GLOG_LIBRARIES}")
+
+  # require OpenGV (should come with Okvis)
+  find_package( OpenGV REQUIRED )
+  message(STATUS "Found OpenGV: ${OPENGV_INCLUDE_DIRS}")
+
+  # require Brisk
+  find_package( Brisk 2 REQUIRED )
+  include_directories(${BRISK_INCLUDE_DIRS})
+  message(STATUS "Found Brisk: ${BRISK_INCLUDE_DIRS}")
+
+  # require DBoW2
+  find_package( DBoW2 REQUIRED )
+  IF( DBoW2_FOUND )
+     MESSAGE( STATUS "Found DBoW2: ${DBoW2_INCLUDE_DIRS}" )
+     include_directories(${DBoW2_INCLUDE_DIRS})
+  ENDIF( DBoW2_FOUND )
+
+  # require DLib
+  find_package( DLib REQUIRED )
+  IF( DLib_FOUND )
+     MESSAGE( STATUS "Found DLib Library: ${DLib_LIBRARIES}" )
+     MESSAGE( STATUS "Found DLib: ${DLib_INCLUDE_DIRS}" )
+     include_directories(${DLib_INCLUDE_DIRS})
+  ENDIF( DLib_FOUND )
+
+  set(
+    SLAM_DEPENDENCIES
+    ${Dlib_LIBRARIES}
+    ${DBoW2_LIBRARIES}
+    ${BRISK_LIBRARIES}
+    ${OPENGV_LIBRARIES}
+    ${GLOG_LIBRARIES}
+    ${OPENGL_LIBRARIES}
+    ${OKVIS_LIBRARIES}
+  )
+endif(BUILD_SLAM_DEMO)
+
 
 set( RSSDK2_FOUND OFF )
 if( USE_RSSDK2 )
@@ -91,7 +140,6 @@ set(
   ${OpenCV_LIBRARIES}
   ${PCL_LIBRARIES}
 )
-
 add_definitions(
   ${PCL_DEFINITIONS}
 )
@@ -219,6 +267,15 @@ if( ${BUILD_AVATAR_DEMO} )
     set_target_properties( ${AVATAR_DEMO_NAME} PROPERTIES OUTPUT_NAME ${LIB_NAME} )
     set_target_properties( ${AVATAR_DEMO_NAME} PROPERTIES COMPILE_FLAGS ${TARGET_COMPILE_FLAGS} )
 endif( ${BUILD_AVATAR_DEMO} )
+
+if( ${BUILD_SLAM_DEMO} )
+    add_executable( ${SLAM_DEMO_NAME} SlamDemo.cpp )
+    target_include_directories( ${SLAM_DEMO_NAME} PRIVATE ${INCLUDE_DIR} )
+    target_link_libraries( ${SLAM_DEMO_NAME} ${SLAM_DEPENDENCIES} ${DEPENDENCIES} ${LIB_NAME} )
+    set_target_properties( ${SLAM_DEMO_NAME} PROPERTIES OUTPUT_NAME ${LIB_NAME} )
+    set_target_properties( ${SLAM_DEMO_NAME} PROPERTIES COMPILE_FLAGS ${TARGET_COMPILE_FLAGS} )
+endif( ${BUILD_SLAM_DEMO} )
+
 
 if( ${BUILD_DATA_RECORDING} )
     add_executable( ${DATA_RECORDING_NAME} DataRecording.cpp )

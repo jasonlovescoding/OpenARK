@@ -52,53 +52,15 @@ namespace ark {
         /**
          * Retrieve the next frame from the camera, updating the xyz, rgb, ir, etc. images. 
          * NOTE: Method is abstract and must be implemented in child classes.
-         * Directly modify the images passed to this function in the update method to update the camera's images.
-         * The images needed will already be initialized to getHeight() * getWidth().
-         * WARNING: if has***Map() is false for the camera class, then the ***_map is not guarenteed to be initialized.
-         *          so for ex. if you plan to enable the RGB map, please override hasRGBMap() to return true, etc.
-         * @param [out] xyz_map XYZ map (projection point cloud). CV_32FC3
-         * @param [out] rgb_map RGB image. CV_8UC3
-         * @param [out] ir_map IR image. CV_8UC1
-         * @param [out] amp_map amplitude map. CV_32FC1
-         * @param [out] flag_map flag map. CV_8UC1
+         * Directly modify the MultiCameraFrame passed to this function in the update method to update the camera's images.
+         * @param [out] frame the MultiCameraFrame that will contain the images from the current frame.
          */
-        virtual void update(cv::Mat & xyz_map, cv::Mat & rgb_map, cv::Mat & ir_map, 
-                            cv::Mat & amp_map, cv::Mat & flag_map) = 0;
+        virtual void update(MultiCameraFrame & frame) = 0;
 
     public:
         // Section B: Stuff that may be overridden but don't need to be 
 
-        /**
-         * Returns true if an RGB image is available from this camera. 
-         */
-        virtual bool hasRGBMap() const;
-
-        /**
-         * Returns true if an RGB image is available from this camera.
-         */
-        virtual bool hasIRMap() const;
-
-        /**
-         * Returns true if a flag map is available from this camera.
-         */
-        virtual bool hasAmpMap() const;
-
-        /**
-         * Returns true if a flag map is available from this camera.
-         */
-        virtual bool hasFlagMap() const;
-
-        /**
-         * Value that determines the validity of a point with respect to the camera's ampMap.
-         */
-        virtual int ampMapInvalidFlagValue() const;
-
-        /**
-         * Value that determines the validity of a point with respect to the camera's flagMap.
-         */
-        virtual float flagMapConfidenceThreshold() const;
-
-        /**
+               /**
          * Check if the camera input is invalid. 
          * @return true on bad input (e.g. error or disconnection), false otherwise
          */
@@ -113,6 +75,12 @@ namespace ark {
          * @return true on success, false on bad input
          */
         bool nextFrame(bool remove_noise = true);
+
+
+        /**
+         * Returns a MultiCameraFrame pointer storing images from the current frame
+         */
+        const MultiCameraFrame::Ptr getFrame() const;
 
         /**
          * Begin capturing frames continuously from this camera on a parallel thread, 
@@ -161,38 +129,7 @@ namespace ark {
          */
         cv::Size getImageSize() const;
 
-        /**
-         * Returns the current XYZ map (ordered point cloud) of the camera. 
-         * Contains the XYZ position (in meters) of each pixel on the screen.
-         * Type: CV_32FC3
-         */
-        const cv::Mat getXYZMap() const;
-
-        /**
-         * Get the RGB Image from this camera, if available. Else, throws an error.
-         * Type: CV_8UC3
-         */
-        const cv::Mat getRGBMap() const;
-
-        /**
-         * Get the infrared (IR) Image from this camera, if available. Else, throws an error.
-         * Type: CV_8UC1
-         */
-        const cv::Mat getIRMap() const;
-
-        /**
-         * Returns the current AmpMap
-         * Type: CV_32FC1
-         */
-        const cv::Mat getAmpMap() const;
-
-        /**
-         * Returns the current FlagMap.
-         * Type: CV_8UC1
-         */
-        const cv::Mat getFlagMap() const;
-
-        /**
+         /**
          * Reads a sample frame from file.
          * @param source the directory which the frame file is stored
          */
@@ -208,37 +145,13 @@ namespace ark {
         typedef std::shared_ptr<DepthCamera> Ptr;
 
     protected:
-        /**
-         * Matrix storing the (x,y,z) data of every point in the observable world.
-         * Matrix type CV_32FC3
-         */
-        cv::Mat xyzMap;
 
+        
         /**
-         * Matrix of confidence values of each corresponding point in the world.
-         * Matrix type CV_32FC1
+         * Stores the images from the camera in the current frame
          */
-        cv::Mat ampMap;
-
-        /**
-         * Matrix representing additional information about the points in the world.
-         * Matrix type CV_8UC1
-         */
-        cv::Mat flagMap;
-
-        /**
-         * The RGB image from this camera, if available
-         * Matrix type CV_8UC3
-         */
-        cv::Mat rgbMap;
-
-        /**
-         * The infrared image from this camera, if available
-         * Matrix type CV_8UC1
-         */
-        cv::Mat irMap;
-
-        /**
+        MultiCameraFrame::Ptr frame;
+               /**
          * Stores pointers to planes visible to the camera in the current frame
          */
         std::vector<FramePlane::Ptr> framePlanes;
@@ -312,14 +225,7 @@ namespace ark {
          */
         static const float NOISE_FILTER_HIGH;
 
-        /** Back buffers for various images */
-        cv::Mat xyzMapBuf;
-        cv::Mat rgbMapBuf;
-        cv::Mat irMapBuf;
-        cv::Mat ampMapBuf;
-        cv::Mat flagMapBuf;
-
-        /** Mutex to ensure thread safety while updating images 
+         /** Mutex to ensure thread safety while updating images 
          *  (mutable = modificable even to const methods)
          */
         mutable std::mutex imageMutex;
