@@ -86,10 +86,12 @@ namespace ark {
 
         bool getImuToTime(double timestamp, std::vector<ImuPair>& data_out){
             ImuDataRaw imu_data;
-            while(imu_queue_.try_dequeue(&imu_data) || (imu_data.timestamp+1000.0/params_->rate)*1e6<timestamp){
+            while((imu_data.timestamp+1000.0/params_->rate)*1e6<timestamp){
                 //convert ImuDataRaw to ImuPair
-                ImuPair imu_data_out = convert(imu_data);
-                data_out.push_back(imu_data_out);
+                if(imu_queue_.try_dequeue(&imu_data)){
+                    ImuPair imu_data_out = convert(imu_data);
+                    data_out.push_back(imu_data_out);
+                }
             }
             if((imu_data.timestamp+1000.0/params_->rate)*1e6<timestamp)
                 return false;
