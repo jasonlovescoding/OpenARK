@@ -90,40 +90,40 @@ namespace ark {
 		return !useRGBStream;
 	}
 
-	void RS2Camera::update(cv::Mat & xyz_map, cv::Mat & rgb_map, cv::Mat & ir_map,
-		cv::Mat & amp_map, cv::Mat & flag_map) {
-		rs2::frameset data;
+  void RS2Camera::update(MultiCameraFrame & frame) {
+      rs2::frameset data;
 
-		try {
-			data = pipe->wait_for_frames();
+      try {
+          frame.images.resize(2);
 
-			rs2::frame depth = data.first(RS2_STREAM_DEPTH);
-			if (useRGBStream) {
-				rs2::frame color = data.first(RS2_STREAM_COLOR);
-				memcpy(rgb_map.data, color.get_data(), 3 * width * height);
-				project(depth, color, xyz_map, rgb_map);
-			}
-			else {
-				rs2::frame ir = data.first(RS2_STREAM_INFRARED);
-				memcpy(ir_map.data, ir.get_data(), width * height);
-				project(depth, ir, xyz_map, ir_map);
-			}
+          data = pipe->wait_for_frames();
 
-		}
-		catch (std::runtime_error e) {
-			// try reconnecting
-			badInputFlag = true;
-			pipe->stop();
-			printf("Couldn't connect to camera, retrying in 0.5s...\n");
-			boost::this_thread::sleep_for(boost::chrono::milliseconds(500));
-			query_intrinsics();
-			pipe->start(config);
-			badInputFlag = false;
-			return;
-		}
-	}
+          if (useRGBStream) {
+              if (frame.images[1].empty()) frame.images[0] = cv::Mat(getImageSize(), CV_8UC3);
+              rs2::frame color = data.first(RS2_STREAM_COLOR);
+              memcpy(frame.images[0].data, color.get_data(), 3 * width * height);
+          }
+          else {
+              if (frame.images[1].empty()) frame.images[0] = cv::Mat(getImageSize(), CV_8UC1);
+              rs2::frame ir = data.first(RS2_STREAM_INFRARED);
+              memcpy(frame.images[1].data, ir.get_data(), width * height);
+          }
 
-
+          if (frame.images[0].empty()) frame.images[0] = cv::Mat(getImageSize(), CV_32FC3);
+          rs2::frame depth = data.first(RS2_STREAM_DEPTH);
+          project(depth, frame.images[0]);
+      } catch (std::runtime_error e) {
+          // try reconnecting
+          badInputFlag = true;
+          pipe->stop();
+          printf("Couldn't connect to camera, retrying in 0.5s...\n");
+          boost::this_thread::sleep_for(boost::chrono::milliseconds(500));
+          query_intrinsics();
+          pipe->start(config);
+          badInputFlag = false;
+          return;
+      }
+  }
 	/*
 	// project depth map to xyz coordinates relative to RGB/IR image
 	void RS2Camera::project(const rs2::frame & depth_frame, const rs2::frame & rgb_frame, cv::Mat & xyz_map, cv::Mat & rgb_map) {
@@ -191,7 +191,7 @@ namespace ark {
 	}
 	*/
 	// project depth map to xyz coordinates directly (faster and minimizes distortion, but will not be aligned to RGB/IR)
-	void RS2Camera::project(const rs2::frame & depth_frame, const rs2::frame & rgb_frame, cv::Mat & xyz_map, cv::Mat & rgb_map) {
+	void RS2Camera::project(const rs2::frame & depth_frame, cv::Mat & xyz_map) {
 		const uint16_t * depth_data = (const uint16_t *)depth_frame.get_data();
 
 		if (!depthIntrinsics || !rgbIntrinsics || !d2rExtrinsics) return;

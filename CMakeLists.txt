@@ -93,6 +93,20 @@ if(BUILD_SLAM_DEMO)
      include_directories(${DLib_INCLUDE_DIRS})
   ENDIF( DLib_FOUND )
 
+  # require Ceres
+  find_package( Ceres REQUIRED )
+  if( CERES_FOUND )
+     message( STATUS "Found Ceres: ${CERES_INCLUDE_DIRS}" )
+     include_directories(${CERES_INCLUDE_DIRS})
+  endif( CERES_FOUND )
+
+  find_package(OpenMP)
+  if (OPENMP_FOUND)
+     message(STATUS "OpenMP found")
+     add_definitions(-DUSE_OPENMP)
+     SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
+  endif()
+
   set(
     SLAM_DEPENDENCIES
     ${Dlib_LIBRARIES}
@@ -102,7 +116,35 @@ if(BUILD_SLAM_DEMO)
     ${GLOG_LIBRARIES}
     ${OPENGL_LIBRARIES}
     ${OKVIS_LIBRARIES}
+    ${CERES_LIBRARIES}
   )
+  if(WIN32)
+    add_subdirectory(src/third_party/glfw)
+    list(APPEND SLAM_DEPENDENCIES glfw3)
+  else()
+      # Find glfw header
+      find_path(GLFW_INCLUDE_DIR NAMES GLFW/glfw3.h
+          PATHS /usr/X11R6/include
+                /usr/include/X11
+                /opt/graphics/OpenGL/include
+                /opt/graphics/OpenGL/contrib/libglfw
+                /usr/local/include
+                /usr/include/GL
+                /usr/include
+      )
+      # Find glfw library
+      find_library(GLFW_LIBRARIES NAMES glfw glfw3
+              PATHS /usr/lib64
+                    /usr/lib
+                    /usr/lib/${CMAKE_LIBRARY_ARCHITECTURE}
+                    /usr/local/lib64
+                    /usr/local/lib
+                    /usr/local/lib/${CMAKE_LIBRARY_ARCHITECTURE}
+                    /usr/X11R6/lib
+      )
+      list(APPEND SLAM_DEPENDENCIES m ${GLFW_LIBRARIES} ${LIBUSB1_LIBRARIES})
+      include_directories(${GLFW_INCLUDE_DIR})
+  endif() 
 endif(BUILD_SLAM_DEMO)
 
 
@@ -163,6 +205,8 @@ set(
   HandDetector.cpp
   PlaneDetector.cpp
   MockCamera.cpp
+  glfwManager.cpp
+  OkvisSLAMSystem.cpp
 )
 
 set(
@@ -183,6 +227,11 @@ set(
   ${INCLUDE_DIR}/HandDetector.h
   ${INCLUDE_DIR}/PlaneDetector.h
   ${INCLUDE_DIR}/MockCamera.h
+  ${INCLUDE_DIR}/SLAMSystem.h
+  ${INCLUDE_DIR}/OkvisSLAMSystem.h
+  ${INCLUDE_DIR}/glfwManager.h
+  ${INCLUDE_DIR}/serial_sync_imu.h
+  ${INCLUDE_DIR}/concurrency.h
   stdafx.h
 )
 
@@ -191,7 +240,9 @@ if( NOT RSSDK2_FOUND )
 else()
   include_directories( ${RSSDK2_INCLUDE_DIR} )
   set( SOURCES ${SOURCES} RS2Camera.cpp )
+  set( SOURCES ${SOURCES} D435Camera.cpp )
   set( HEADERS ${HEADERS} ${INCLUDE_DIR}/RS2Camera.h )
+  set( HEADERS ${HEADERS} ${INCLUDE_DIR}/D435Camera.h )
   set( DEPENDENCIES ${DEPENDENCIES} ${RSSDK2_LIBRARY} )
 endif( NOT RSSDK2_FOUND )
 
@@ -272,7 +323,7 @@ if( ${BUILD_SLAM_DEMO} )
     add_executable( ${SLAM_DEMO_NAME} SlamDemo.cpp )
     target_include_directories( ${SLAM_DEMO_NAME} PRIVATE ${INCLUDE_DIR} )
     target_link_libraries( ${SLAM_DEMO_NAME} ${SLAM_DEPENDENCIES} ${DEPENDENCIES} ${LIB_NAME} )
-    set_target_properties( ${SLAM_DEMO_NAME} PROPERTIES OUTPUT_NAME ${LIB_NAME} )
+    #set_target_properties( ${SLAM_DEMO_NAME} PROPERTIES OUTPUT_NAME ${LIB_NAME} )
     set_target_properties( ${SLAM_DEMO_NAME} PROPERTIES COMPILE_FLAGS ${TARGET_COMPILE_FLAGS} )
 endif( ${BUILD_SLAM_DEMO} )
 

@@ -38,23 +38,15 @@ namespace ark {
 
     bool DepthCamera::nextFrame(bool removeNoise)
     {
-        // initialize back buffers
-        initializeImages();
+        MultiCameraFrame::Ptr frameBuf =
+            std::make_shared<MultiCameraFrame>(frame ? frame->frameId + 1 : 0);
 
-        // call update with back buffer images (to allow continued operation on front end)
-        update(xyzMapBuf, rgbMapBuf, irMapBuf, ampMapBuf, flagMapBuf);
+        // update the backbuffer frame (to allow continued use of images on other threads)
+        update(*frameBuf);
 
-        if (!badInput() && xyzMapBuf.data) {
-            if (removeNoise) {
-                this->removeNoise(xyzMapBuf, ampMapBuf, flagMapConfidenceThreshold());
-            }
-        }
-
-        // lock all buffers while swapping
-        std::lock_guard<std::mutex> lock(imageMutex);
-
-        // when update is done, swap buffers to front
-        swapBuffers();
+        // when update is done, move the backbuffer to front
+        std::lock_guard<std::mutex> lock(imageMutex); // lock all buffers while moving
+        frame = std::move(frameBuf);
 
         // call callbacks
         for (auto callback : updateCallbacks) {
@@ -62,6 +54,7 @@ namespace ark {
         }
 
         return !badInput();
+
     }
 
 
@@ -132,58 +125,19 @@ namespace ark {
     }
 
 
+    const MultiCameraFrame::Ptr DepthCamera::getFrame() const
+    {
+        return frame;
+    }
+
+    int DepthCamera::getFrameID() const
+    {
+        if (frame == nullptr) return 0;
+        return frame->frameId;
+    }
+
     const std::string DepthCamera::getModelName() const {
         return "DepthCamera";
-    }
-
-    void DepthCamera::initializeImages()
-    {
-        cv::Size sz = getImageSize();
-
-        // initialize back buffers, if necessary
-        xyzMapBuf.release();
-        xyzMapBuf.create(sz, CV_32FC3);
-
-        if (hasRGBMap()) {
-            rgbMapBuf.release();
-            rgbMapBuf.create(sz, CV_8UC3);
-        }
-
-        if (hasIRMap()) {
-            irMapBuf.release();
-            irMapBuf.create(sz, CV_8U);
-        }
-
-        if (hasAmpMap()) {
-            ampMapBuf.release();
-            ampMapBuf.create(sz, CV_32F);
-        }
-
-        if (hasFlagMap()) {
-            flagMapBuf.release();
-            flagMapBuf.create(sz, CV_8U);
-        }
-    }
-
-    /** swap a single buffer */
-    void DepthCamera::swapBuffer(bool (DepthCamera::* check_func)() const, cv::Mat & img, cv::Mat & buf)
-    {
-        if ((this->*check_func)()) {
-            cv::swap(img, buf);
-        }
-        else {
-            img.data = nullptr;
-        }
-    }
-
-    /** swap all buffers */
-    void DepthCamera::swapBuffers()
-    {
-        cv::swap(xyzMap, xyzMapBuf);
-        swapBuffer(&DepthCamera::hasRGBMap, rgbMap, rgbMapBuf);
-        swapBuffer(&DepthCamera::hasIRMap, irMap, irMapBuf);
-        swapBuffer(&DepthCamera::hasAmpMap, ampMap, ampMapBuf);
-        swapBuffer(&DepthCamera::hasFlagMap, flagMap, flagMapBuf);
     }
 
     /**
@@ -194,14 +148,22 @@ namespace ark {
         cv::FileStorage fs(destination, cv::FileStorage::WRITE);
         std::lock_guard<std::mutex> lock(imageMutex);
 
-        fs << "xyzMap" << xyzMap;
-        fs << "ampMap" << ampMap;
-        fs << "flagMap" << flagMap;
-        fs << "rgbMap" << rgbMap;
-        fs << "irMap" << irMap;
+        int N = (int) frame->images.size();
+        fs << "num_img" << N;
+        for (int i = 0; i < N; ++i) {
+            fs << ("img" + std::to_string(i)) << frame->images[i];
+        }
 
         fs.release();
         return true;
+    }
+
+    const cv::Mat DepthCamera::getFrameImage(int idx, int default_type) const
+    {
+        std::lock_guard<std::mutex> lock(imageMutex);
+        if (frame == nullptr || frame->images.size() <= idx || frame->images[idx].empty())
+            return cv::Mat::zeros(getImageSize(), default_type);
+        return frame->images[idx];
     }
 
     /**
@@ -213,12 +175,13 @@ namespace ark {
         fs.open(source, cv::FileStorage::READ);
 
         std::lock_guard<std::mutex> lock(imageMutex);
+        int N; fs["num_img"] >> N;
 
-        fs["xyzMap"] >> xyzMap;
-        fs["ampMap"] >> ampMap;
-        fs["flagMap"] >> flagMap;
-        fs["rgbMap"] >> rgbMap;
-        fs["irMap"] >> irMap;
+        for (int i = 0; i < N; ++i) {
+            cv::Mat m;
+            fs["img" + std::to_string(i)] >> m;
+            frame->images.push_back(m);
+        }
         fs.release();
 
         // call callbacks
@@ -226,72 +189,12 @@ namespace ark {
             callback.second(*this);
         }
 
-        return !(xyzMap.rows == 0 || ampMap.rows == 0 || flagMap.rows == 0);
+        return N > 0;
     }
 
     const cv::Mat DepthCamera::getXYZMap() const
     {
-        std::lock_guard<std::mutex> lock(imageMutex);
-        if (xyzMap.data == nullptr) return cv::Mat::zeros(getHeight(), getWidth(), CV_32FC3);
-        return xyzMap;
-    }
-
-    const cv::Mat DepthCamera::getAmpMap() const
-    {
-        if (!hasAmpMap()) throw;
-
-        std::lock_guard<std::mutex> lock(imageMutex);
-        if (ampMap.data == nullptr) return cv::Mat::zeros(getHeight(), getWidth(), CV_32F);
-        return ampMap;
-    }
-
-    const cv::Mat DepthCamera::getFlagMap() const
-    {
-        if (!hasFlagMap()) throw;
-
-        std::lock_guard<std::mutex> lock(imageMutex);
-        if (flagMap.data == nullptr) return cv::Mat::zeros(getHeight(), getWidth(), CV_8U);
-        return flagMap;
-    }
-
-    const cv::Mat DepthCamera::getRGBMap() const {
-        if (!hasRGBMap()) throw;
-
-        std::lock_guard<std::mutex> lock(imageMutex);
-        if (rgbMap.data == nullptr) return cv::Mat::zeros(getHeight(), getWidth(), CV_8UC3);
-        return rgbMap;
-    }
-
-    const cv::Mat DepthCamera::getIRMap() const
-    {
-        if (!hasIRMap()) throw;
-
-        std::lock_guard<std::mutex> lock(imageMutex);
-        if (irMap.data == nullptr) return cv::Mat::zeros(getImageSize(), CV_8U);
-        return irMap;
-    }
-
-    bool DepthCamera::hasAmpMap() const
-    {
-        // Assume no amp map, unless overridden
-        return false;
-    }
-
-    bool DepthCamera::hasFlagMap() const
-    {
-        // Assume no flag map, unless overridden
-        return false;
-    }
-
-    bool DepthCamera::hasRGBMap() const {
-        // Assume no RGB image, unless overridden
-        return false;
-    }
-
-    bool DepthCamera::hasIRMap() const
-    {
-        // Assume no IR image, unless overridden
-        return false;
+        return getFrameImage(0);
     }
 
     // note: depth camera must have XYZ map
@@ -303,6 +206,8 @@ namespace ark {
     float DepthCamera::flagMapConfidenceThreshold() const{
         return 0.5;
     }
+
+
 
     void DepthCamera::captureThreadingHelper(int fps_cap, volatile bool * interrupt, bool remove_noise)
     {

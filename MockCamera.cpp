@@ -18,19 +18,18 @@ namespace ark {
 
 	// Reading from file OpenCV
 	// https://docs.opencv.org/2.4/modules/core/doc/xml_yaml_persistence.html
-	void MockCamera::update(cv::Mat & xyz_map, cv::Mat & rgb_map, cv::Mat & ir_map,
-		cv::Mat & amp_map, cv::Mat & flag_map) {
-		if (file_names.empty()) {
+	void MockCamera::update(MultiCameraFrame & frame) {
+//		if (file_names.empty()) {
 			return;
-		}
-
+//		}
+/*
 		const auto path = file_names.front();
 		file_names.pop_front();
 		cv::FileStorage fs2(path, cv::FileStorage::READ);
 
 		fs2["xyz_map"] >> xyz_map;
 
-		fs2.release();
+		fs2.release();*/
 	}
 
 	int MockCamera::getHeight() const {

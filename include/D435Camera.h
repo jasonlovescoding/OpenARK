@@ -13,7 +13,7 @@ namespace ark {
     * Example on how to read from sensor and visualize its output
     * @include SensorIO.cpp
     */
-    class RS2Camera : public DepthCamera
+    class D435Camera 
     {
     public:
 
@@ -22,89 +22,81 @@ namespace ark {
         * @param use_rgb_stream if true, uses the RGB stream and disable the IR stream (which is on by default)
         *                       This results in a smaller field of view and has an appreciable performance cost.
         */
-        explicit RS2Camera(bool use_rgb_stream = false);
+        explicit D435Camera();
 
         /**
         * Destructor for the RealSense Camera.
         */
-        ~RS2Camera() override;
+        ~D435Camera();
 
         /**
          * Get the camera's model name.
          */
-        const std::string getModelName() const override;
+        const std::string getModelName() const;
 
         /** 
          * Returns the width of the SR300 camera frame 
          */
-        int getWidth() const override;
+        int getWidth() const;
 
         /** 
          * Returns the height of the SR300 camera frame 
          */
-        int getHeight() const override;
+        int getHeight() const;
+
+        /** 
+         * Sets the external hardware sync mode for the camera
+         */
+        void enableSync(bool flag);
 
         /**
          * Returns default detection parameters for this depth camera class
          */
-        const DetectionParams::Ptr & getDefaultParams() const override;
+        //const DetectionParams::Ptr & getDefaultParams() const ;
 
         /**
          * Returns true if an RGB image is available from this camera.
          * @return true if an RGB image is available from this camera.
          */
-        bool hasRGBMap() const override;
+        //bool hasRGBMap() const override;
 
         /**
          * Returns true if an infrared (IR) image is available from this camera.
          * @return true if an infrared (IR) image is available from this camera.
          */
-        bool hasIRMap() const override;
+        //bool hasIRMap() const override;
 
 
         /** Preferred frame height */
         const int PREFERRED_FRAME_H = 480;
 
         /** Shared pointer to SR300 camera instance */
-        typedef std::shared_ptr<RS2Camera> Ptr;
+        typedef std::shared_ptr<D435Camera> Ptr;
 
-    protected:
         /**
         * Gets the new frame from the sensor (implements functionality).
         * Updates xyzMap and ir_map.
         */
-        void update(MultiCameraFrame & frame) override;
+        void update(MultiCameraFrame & frame);
+
+    protected:
 
         /**
          * Initialize the camera, opening channels and resetting to initial configurations
          */
         void initCamera();
 
-        /** Converts an RS2 raw depth image to an ordered point cloud based on the current camera's intrinsics */
+        /** Converts an D435 raw depth image to an ordered point cloud based on the current camera's intrinsics */
         void project(const rs2::frame & depth_frame, cv::Mat & xyz_map);
 
         /** Query RealSense camera intrinsics */
-        void query_intrinsics();
+        //void query_intrinsics();
 
-        // internal storage
         std::shared_ptr<rs2::pipeline> pipe;
-        rs2::align align;
         rs2::config config;
+        rs2::depth_sensor* depth_sensor;
 
-        // pointer to depth sensor intrinsics (RealSense C API: rs_intrinsics)
-        void * depthIntrinsics = nullptr;
-        // pointer to RGB/IR sensor intrinsics (RealSense C API: rs_intrinsics)
-        void * rgbIntrinsics = nullptr;
-        // pointer to depth-to-RGB extrinsics (RealSense C API: rs_extrinsics)
-        void * d2rExtrinsics = nullptr;
-        // pointer to RGB-to-depth extrinsics (RealSense C API: rs_extrinsics)
-        void * r2dExtrinsics = nullptr;
-
-        double scale;
         int width, height;
-        bool useRGBStream;
-
-        mutable bool defaultParamsSet = false;
-        mutable DetectionParams::Ptr defaultParams;
+        bool badInputFlag;
     };
 }

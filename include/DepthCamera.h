@@ -6,6 +6,7 @@
 #include <map>
 
 #include "Util.h"
+#include "Types.h"
 #include "FrameObject.h"
 #include "Hand.h"
 #include "FramePlane.h"
@@ -60,7 +61,80 @@ namespace ark {
     public:
         // Section B: Stuff that may be overridden but don't need to be 
 
-               /**
+ /**
+         * Returns true if an RGB image is available from this camera. 
+         */
+        virtual bool hasRGBMap() const { return false; }
+
+        /**
+         * Returns true if an RGB image is available from this camera.
+         */
+        virtual bool hasIRMap() const { return false; }
+
+        /**
+         * Returns true if a fisheye image is available from this camera.
+         */
+        virtual bool hasFishEyeMap() const  { return false; }
+
+        /**
+         * Returns true if a flag map is available from this camera.
+         */
+        virtual bool hasAmpMap() const { return false; }
+
+        /**
+         * Returns true if a flag map is available from this camera.
+         */
+        virtual bool hasFlagMap() const { return false; }
+
+        /**
+         * Get the RGB image from this camera, if available. Else, throws an error.
+         * Type: CV_8UC3
+         */
+        virtual const cv::Mat getRGBMap() const { throw; }
+
+        /**
+         * Get the infrared (IR) image from this camera, if available. Else, throws an error.
+         * Type: CV_8UC1
+         */
+        virtual const cv::Mat getIRMap() const { throw; }
+
+        /**
+         * Get the fisheye image from this camera, if available. Else, throws an error.
+         * Type: CV_8UC1
+         */
+        virtual const cv::Mat getFishEyeMap() const { throw; }
+
+        /**
+         * Returns the current AmpMap
+         * Type: CV_32FC1
+         */
+        virtual const cv::Mat getAmpMap() const { throw; }
+
+        /**
+         * Returns the current FlagMap.
+         * Type: CV_8UC1
+         */
+        virtual const cv::Mat getFlagMap() const { throw; }
+
+        /**
+         * Returns the current XYZ map (ordered point cloud) of the camera. 
+         * Contains the XYZ position (in meters) of each pixel on the screen.
+         * NOTE: default implementation returns image at index 0
+         * Type: CV_32FC3
+         */
+        virtual const cv::Mat getXYZMap() const;
+
+        /**
+         * Value that determines the validity of a point with respect to the camera's ampMap.
+         */
+        virtual int ampMapInvalidFlagValue() const;
+
+        /**
+         * Value that determines the validity of a point with respect to the camera's flagMap.
+         */
+        virtual float flagMapConfidenceThreshold() const;
+
+         /**
          * Check if the camera input is invalid. 
          * @return true on bad input (e.g. error or disconnection), false otherwise
          */
@@ -129,6 +203,20 @@ namespace ark {
          */
         cv::Size getImageSize() const;
 
+        /**
+         * Returns the ID of the current frame
+         */
+        int getFrameID() const;
+
+        /**
+         * Retrieves the image with index 'idx' from the camera
+         * @param idx index of image
+         * @param default_type type of image to return (inferred if available)
+         * @return idx-th image, if available; else
+         *         returns an empty image with size getImageSize() and type default_type
+         */
+        const cv::Mat getFrameImage(int idx, int default_type = CV_32FC3) const;
+
          /**
          * Reads a sample frame from file.
          * @param source the directory which the frame file is stored
@@ -170,28 +258,6 @@ namespace ark {
 
     private:
         // Section D: implementation details
-
-        /**
-         * Helper for initializing images used by the generic depth camera.
-         * Allocates memory for back buffers if required.
-         */
-        void initializeImages();
-
-        /**
-         * Helper for swapping a single back buffer to the foreground.
-         * If the image is not available, creates a dummy mat with null value.
-         * @param check_func member function pointer to function that, if true on call, buffers are swapped
-         *                   if false, a dummy mat is created
-         * @param img pointer to foreground image
-         * @param buf pointer to back buffer
-         */
-        void swapBuffer(bool (DepthCamera::* check_func)() const, cv::Mat & img, cv::Mat & buf);
-
-        /**
-         * Helper for swapping all back buffers to the foreground. 
-         * If an image is not available, creates a dummy mat with null value.
-         */
-        void swapBuffers();
 
         /**
          * Removes noise from an XYZMap based on confidence provided in the AmpMap and FlagMap.
