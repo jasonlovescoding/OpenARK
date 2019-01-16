@@ -26,7 +26,7 @@ namespace ark {
         //Enable hardware syncronization
         rs2::device selected_device = selection.get_device();
         depth_sensor = new rs2::depth_sensor(selected_device.first<rs2::depth_sensor>());
-        depth_sensor->set_option(RS2_OPTION_EMITTER_ENABLED, 0.f);
+        depth_sensor->set_option(RS2_OPTION_EMITTER_ENABLED, 1.f);
         depth_sensor->set_option(RS2_OPTION_INTER_CAM_SYNC_MODE,0);
     }
 

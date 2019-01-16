@@ -7,57 +7,6 @@
 
 using namespace ark;
 
-
-/*class PoseViewer
-{
- public:
-  EIGEN_MAKE_ALIGNED_OPERATOR_NEW
-
-  MyGUI::Axis _axis = MyGUI::Axis("Axis2",1);
-  MyGUI::Path _path3d= MyGUI::Path("Path1",Eigen::Vector3d(1, 0, 0));
-  PoseViewer()
-  {
-    drawing_ = false;
-    showing_ = false;
-  }
-  // this we can register as a callback
-  void publishFullStateAsCallback(
-      const okvis::Time & , const okvis::kinematics::Transformation & T_WS,
-      const Eigen::Matrix<double, 9, 1> & speedAndBiases,
-      const Eigen::Matrix<double, 3, 1> & )
-  {
-
-    // just append the path
-    Eigen::Vector3d r = T_WS.r();
-    Eigen::Matrix3d C = T_WS.C();
-
-    // draw it
-    while (showing_) {
-    }
-    drawing_ = true;
-
-    _path3d.add_node(Eigen::Vector3d(r.x(),r.z(),-r.y()));
-    _axis.set_transform(Eigen::Translation3d(Eigen::Vector3d(r.x(),r.z(),-r.y()))*Eigen::Quaterniond(C));
-
-    drawing_ = false; // notify
-  }
-  void display()
-  {
-    while (drawing_) {
-    }
-    showing_ = true;
-    MyGUI::Manager::update();
-    //cv::imshow("OKVIS Top View", _image);
-    showing_ = false;
-    //cv::waitKey(1);
-  }
- private:
-
-  std::atomic_bool drawing_;
-  std::atomic_bool showing_;
-};*/
-
-
 int main(int argc, char **argv)
 {
 
@@ -99,10 +48,11 @@ int main(int argc, char **argv)
     std::this_thread::sleep_for( std::chrono::duration<double, std::milli>(100));
     printf("Camera initialization started...\n");
     D435Camera camera;
+    printf("IMU initialization started...\n");
     imu0.start();
     camera.enableSync(true);
 
-    printf("Camera initialization complete\n");
+    printf("Camera-IMU initialization complete\n");
     fflush(stdout);
 
     //Window for displaying the path
@@ -117,12 +67,6 @@ int main(int argc, char **argv)
     path_win.add_object(&axis1);
     path_win.add_object(&axis2);
     path_win.add_object(&grid1);
-    //path_win.add_object(&(poseViewer._axis));
-    //path_win.add_object(&(poseViewer._path3d));
-    //slam.okvis_estimator_->setFullStateCallback(
-    //  std::bind(&PoseViewer::publishFullStateAsCallback, &poseViewer,
-    //            std::placeholders::_1, std::placeholders::_2,
-    //            std::placeholders::_3, std::placeholders::_4));
 
     //Recieves output from SLAM system and displays to the screen
     FrameAvailableHandler handler([&path1, &axis2, &img_win](MultiCameraFrame frame) {
@@ -133,7 +77,7 @@ int main(int argc, char **argv)
         axis2.set_transform(transform);
         img_win.set_image(frame.images[0]);
     });
-    slam.AddFrameAvailableHandler(handler, "mapping");
+    slam.AddKeyFrameAvailableHandler(handler, "mapping");
 
     //run until display is closed
     okvis::Time start(0.0);
@@ -141,7 +85,6 @@ int main(int argc, char **argv)
     while (MyGUI::Manager::running()){
         printf("test\n");
         //Update the display
-        //poseViewer.display();
         MyGUI::Manager::update();
 
         //Get current camera frame
@@ -160,15 +103,12 @@ int main(int argc, char **argv)
         slam.PushIMU(imuData);
         slam.PushFrame(frame.images, frame.timestamp);
 
-        //cv::imshow("Img 0", frame.images[0]);
-        //cv::imshow("Img 1", frame.images[1]);
-
         int k = cv::waitKey(1);
         if (k == 'q' || k == 'Q' || k == 27) break; // 27 is ESC
     }
     printf("\nTerminate...\n");
     // Clean up
-    //slam.ShutDown();
+    slam.ShutDown();
     printf("\nExiting...\n");
     return 0;
 }
