@@ -95,7 +95,10 @@ namespace ark {
         std::shared_ptr<rs2::pipeline> pipe;
         rs2::config config;
         rs2::depth_sensor* depth_sensor;
+        rs2::device device;
+        rs2_intrinsics depthIntrinsics;
 
+        double scale;
         int width, height;
         bool badInputFlag;
     };

@@ -85,13 +85,12 @@ if(BUILD_SLAM_DEMO)
      include_directories(${DBoW2_INCLUDE_DIRS})
   ENDIF( DBoW2_FOUND )
 
-  # require DLib
-  find_package( DLib REQUIRED )
-  IF( DLib_FOUND )
-     MESSAGE( STATUS "Found DLib Library: ${DLib_LIBRARIES}" )
-     MESSAGE( STATUS "Found DLib: ${DLib_INCLUDE_DIRS}" )
-     include_directories(${DLib_INCLUDE_DIRS})
-  ENDIF( DLib_FOUND )
+  # require DLoopDetector
+  find_package( DLoopDetector REQUIRED )
+  IF( DLoopDetector_FOUND )
+     MESSAGE( STATUS "Found DLoopDetector: ${DLoopDetector_INCLUDE_DIRS}" )
+     include_directories(${DLoopDetector_INCLUDE_DIRS})
+  ENDIF( DLoopDetector_FOUND )
 
   # require Ceres
   find_package( Ceres REQUIRED )

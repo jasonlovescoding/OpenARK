@@ -1,12 +1,14 @@
 #pragma once
 
 #include "SLAMSystem.h"
+#include "SparseMap.h"
 #include <okvis/VioParametersReader.hpp>
 #include <okvis/ThreadedKFVio.hpp>
 #include <thread>
 #include <opencv2/core/eigen.hpp>
 #include "SingleConsumerPriorityQueue.h"
 #include <atomic>
+#include <brisk/brisk.h>
 
 namespace ark {
     /** Okvis-based SLAM system */
@@ -22,7 +24,16 @@ namespace ark {
             }
         };
 
-        struct StampedPath {
+        struct StampedFrameData {
+            okvis::OutFrameData::Ptr data;
+            okvis::Time timestamp;
+            bool operator<(const StampedFrameData& right) const
+            {
+                return timestamp > right.timestamp;
+            }
+        };
+
+        /*struct StampedPath {
             std::vector<okvis::kinematics::Transformation> path;
             okvis::Time timestamp;
             bool loopClosureDetected;
@@ -39,9 +50,10 @@ namespace ark {
             {
                 return timestamp > right.timestamp;
             }
-        };
+        };*/
 
     public:
+        EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
         OkvisSLAMSystem(const std::string &strVocFile, const std::string &strSettingsFile);
 
@@ -65,6 +77,8 @@ namespace ark {
 
         void display();
 
+        void getTrajectory(std::vector<Eigen::Matrix4d>& trajOut);
+
         ~OkvisSLAMSystem();
 
         
@@ -80,14 +94,17 @@ namespace ark {
         okvis::Time t_imu_;
         okvis::Duration deltaT_;
         okvis::VioParameters parameters_;
-        SingleConsumerPriorityQueue<StampedImages> image_queue_;
+        //SingleConsumerPriorityQueue<StampedImages> image_queue_;
         SingleConsumerPriorityQueue<StampedImages> frame_queue_;
-        SingleConsumerPriorityQueue<StampedPath> path_queue_;
-        SingleConsumerPriorityQueue<StampedState> state_queue_;
-        std::thread keyFrameConsumerThread_;
+        SingleConsumerPriorityQueue<StampedFrameData> frame_data_queue_;
+        //SingleConsumerPriorityQueue<StampedPath> path_queue_;
+        //SingleConsumerPriorityQueue<StampedState> state_queue_;
+        //std::thread keyFrameConsumerThread_;
         std::thread frameConsumerThread_;
         int num_frames_;
         std::atomic<bool> kill;
+        SparseMap<DBoW2::FBRISK::TDescriptor, DBoW2::FBRISK> sparseMap_;
+        MultiCameraSystem::Ptr cameraSystem_; 
 
     }; // OkvisSLAMSystem
 

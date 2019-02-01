@@ -12,22 +12,41 @@ namespace ark {
     D435Camera::D435Camera() {
         //Setup camera
         //TODO: Make read from config file
+        rs2::context ctx;
+        device = ctx.query_devices().front();
+        //depth_sensor = new rs2::depth_sensor(device.first<rs2::depth_sensor>());
+        //std::cout << "sync?: " << depth_sensor->get_option(RS2_OPTION_INTER_CAM_SYNC_MODE) <<std::endl;
+        //depth_sensor->set_option(RS2_OPTION_INTER_CAM_SYNC_MODE,0);
         width = 640;
         height = 480;
         config.enable_stream(RS2_STREAM_DEPTH,-1,width, height,RS2_FORMAT_Z16,30);
         config.enable_stream(RS2_STREAM_INFRARED, 1, width, height, RS2_FORMAT_Y8, 30);
         config.enable_stream(RS2_STREAM_INFRARED, 2, width, height, RS2_FORMAT_Y8, 30);
 
+        //std::this_thread::sleep_for( std::chrono::duration<double, std::milli>(30000)); 
+
         //Start streaming data
-        pipe = std::make_shared<rs2::pipeline>();
-        rs2::pipeline_profile selection = pipe->start(config);
+        //pipe = std::make_shared<rs2::pipeline>();
+        //rs2::pipeline_profile selection = pipe->start(config);
 
         //Disable IR emitter
         //Enable hardware syncronization
-        rs2::device selected_device = selection.get_device();
-        depth_sensor = new rs2::depth_sensor(selected_device.first<rs2::depth_sensor>());
-        depth_sensor->set_option(RS2_OPTION_EMITTER_ENABLED, 1.f);
-        depth_sensor->set_option(RS2_OPTION_INTER_CAM_SYNC_MODE,0);
+        //rs2::device selected_device = selection.get_device();
+        //depth_sensor = new rs2::depth_sensor(device.first<rs2::depth_sensor>());
+        //depth_sensor->set_option(RS2_OPTION_EMITTER_ENABLED, 1.f);
+        //depth_sensor->set_option(RS2_OPTION_INTER_CAM_SYNC_MODE,0);
+        //pipe->start(config);
+        //pipe->stop();
+        //delete depth_sensor;
+        device.hardware_reset();
+        std::this_thread::sleep_for( std::chrono::duration<double, std::milli>(3000));
+        rs2::device_hub hub(ctx);
+        device = hub.wait_for_device();
+        depth_sensor = new rs2::depth_sensor(device.first<rs2::depth_sensor>());
+        std::cout << "sync?: " << depth_sensor->get_option(RS2_OPTION_INTER_CAM_SYNC_MODE) <<std::endl;
+        scale = depth_sensor->get_depth_scale();
+        //std::cout << ctx.query_devices().size() <<std::endl;
+        //
     }
 
     D435Camera::~D435Camera() {
@@ -42,7 +61,21 @@ namespace ark {
     }
 
     void D435Camera::enableSync(bool flag){
-        depth_sensor->set_option(RS2_OPTION_INTER_CAM_SYNC_MODE,flag);
+        //pipe->stop();
+        //rs2::context ctx;
+        //rs2::device device = ctx.query_devices()[0];  
+        //std::cout << "sync?: " << depth_sensor->get_option(RS2_OPTION_INTER_CAM_SYNC_MODE) <<std::endl <<std::flush;
+        depth_sensor->set_option(RS2_OPTION_INTER_CAM_SYNC_MODE,1);
+        pipe = std::make_shared<rs2::pipeline>();
+        rs2::pipeline_profile selection = pipe->start(config);
+        auto depthStream = selection.get_stream(RS2_STREAM_DEPTH)
+                             .as<rs2::video_stream_profile>();
+        //rs2::device selected_device = selection.get_device();
+        //depth_sensor = new rs2::depth_sensor(selected_device.first<rs2::depth_sensor>());
+        depthIntrinsics = depthStream.get_intrinsics();
+        //depth_sensor->set_option(RS2_OPTION_EMITTER_ENABLED, 1.f);
+        //depth_sensor->set_option(RS2_OPTION_INTER_CAM_SYNC_MODE,flag);  
+        //pipe->start(config);
     }
 
     const std::string D435Camera::getModelName() const {
@@ -91,7 +124,7 @@ namespace ark {
 
         try {
             // Ensure the frame has space for all images
-            frame.images.resize(2);
+            frame.images_.resize(3);
 
             // Get frames from camera
             auto frames = pipe->wait_for_frames();
@@ -100,17 +133,18 @@ namespace ark {
             auto depth = frames.get_depth_frame();
 
             // Store ID for later
-            frame.frameId = infrared.get_frame_number();
+            frame.frameId_ = infrared.get_frame_number();
 
             // Convert infrared frame to opencv
-            if (frame.images[0].empty()) frame.images[0] = cv::Mat(cv::Size(width,height), CV_8UC1);
-            std::memcpy( frame.images[0].data, infrared.get_data(),width * height);
+            if (frame.images_[0].empty()) frame.images_[0] = cv::Mat(cv::Size(width,height), CV_8UC1);
+            std::memcpy( frame.images_[0].data, infrared.get_data(),width * height);
 
-            if (frame.images[1].empty()) frame.images[1] = cv::Mat(cv::Size(width,height), CV_8UC1);
-            std::memcpy( frame.images[1].data, infrared2.get_data(),width * height);
+            if (frame.images_[1].empty()) frame.images_[1] = cv::Mat(cv::Size(width,height), CV_8UC1);
+            std::memcpy( frame.images_[1].data, infrared2.get_data(),width * height);
 
-            //if (frame.images[2].empty()) frame.images[2] = cv::Mat(getImageSize(), CV_32FC3);
-            //project(depth, frame.images[2]);
+            if (frame.images_[2].empty()) frame.images_[2] = cv::Mat(cv::Size(width,height), CV_32FC3);
+            project(depth, frame.images_[2]);
+            frame.images_[2] = frame.images_[2]*.001;
 
 
         } catch (std::runtime_error e) {
@@ -127,11 +161,10 @@ namespace ark {
     }
 
     // project depth map to xyz coordinates directly (faster and minimizes distortion, but will not be aligned to RGB/IR)
-    /*void D435Camera::project(const rs2::frame & depth_frame, cv::Mat & xyz_map) {
+    void D435Camera::project(const rs2::frame & depth_frame, cv::Mat & xyz_map) {
         const uint16_t * depth_data = (const uint16_t *)depth_frame.get_data();
 
-        if (!depthIntrinsics || !rgbIntrinsics || !d2rExtrinsics) return;
-        rs2_intrinsics * dIntrin = reinterpret_cast<rs2_intrinsics *>(depthIntrinsics);
+        rs2_intrinsics * dIntrin = &depthIntrinsics;
 
         const uint16_t * srcPtr;
         cv::Vec3f * destPtr;
@@ -150,11 +183,12 @@ namespace ark {
                     continue;
                 }
                 srcPixel[0] = c;
-                rs2_deproject_pixel_to_point(destXYZ, dIntrin, srcPixel, srcPtr[c] * scale);
+                rs2_deproject_pixel_to_point(destXYZ, dIntrin, srcPixel, srcPtr[c]);
+                //std::cout<< destXYZ[0] << destXYZ[1] << destXYZ[2] <<std::endl;
                 memcpy(&destPtr[c], destXYZ, 3 * sizeof(float));
             }
         }
-    }*/
+    }
 
     /*void D435Camera::query_intrinsics() {
         rs2_intrinsics * depthIntrinsics = new rs2_intrinsics();

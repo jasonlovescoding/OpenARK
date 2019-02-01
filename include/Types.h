@@ -51,74 +51,279 @@ namespace ark{
         typedef std::shared_ptr<RGBDFrame> Ptr;
     };
 
+    /** A container for Camera Calibration */
+    class CameraCalibration {  
+    public:
+    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+        cv::Mat camera_matrix;
+        cv::Mat distortion_coeffs;
+
+        CameraCalibration(double fx,double fy,double cx,double cy, cv::Mat distortion_coeffs = cv::Mat()):
+        distortion_coeffs(distortion_coeffs){
+            camera_matrix = cv::Mat(3,3,cv::DataType<double>::type);
+            camera_matrix.at<double>(0,0) = fx;
+            camera_matrix.at<double>(1,1) = fy;
+            camera_matrix.at<double>(0,2) = cx;
+            camera_matrix.at<double>(1,2) = cy;
+        }
+
+        void setDistortionCoefficients(double k1,double k2, double p1, double p2){
+            distortion_coeffs= cv::Mat(4,1,cv::DataType<double>::type);
+            distortion_coeffs.at<double>(0) = k1;
+            distortion_coeffs.at<double>(1) = k2;
+            distortion_coeffs.at<double>(2) = p1;
+            distortion_coeffs.at<double>(3) = p2;
+        }
+
+        void setDistortionCoefficients(double k1,double k2, double p1, double p2, 
+                double k3){
+            distortion_coeffs= cv::Mat(5,1,cv::DataType<double>::type);
+            distortion_coeffs.at<double>(0) = k1;
+            distortion_coeffs.at<double>(1) = k2;
+            distortion_coeffs.at<double>(2) = p1;
+            distortion_coeffs.at<double>(3) = p2;
+            distortion_coeffs.at<double>(4) = k3;
+        }
+
+        void setDistortionCoefficients(double k1,double k2, double p1, double p2, 
+                double k3, double k4, double k5, double k6){
+            distortion_coeffs= cv::Mat(8,1,cv::DataType<double>::type);
+            distortion_coeffs.at<double>(0) = k1;
+            distortion_coeffs.at<double>(1) = k2;
+            distortion_coeffs.at<double>(2) = p1;
+            distortion_coeffs.at<double>(3) = p2;
+            distortion_coeffs.at<double>(4) = k3;
+            distortion_coeffs.at<double>(5) = k4;
+            distortion_coeffs.at<double>(6) = k5;
+            distortion_coeffs.at<double>(7) = k6;
+        }
+
+    };//CameraCalibration
+
+    /** A decription of the setup of a muliple camera system */
+    class MultiCameraSystem {
+    public:
+    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+        typedef std::shared_ptr<MultiCameraSystem> Ptr;
+        /** Camera Calibration Parameters */
+        std::vector<CameraCalibration> camera_calibrations;
+
+        /** Tranformation matrices of the cameras WRT sensor body */
+        std::vector<Eigen::Matrix4d> T_SC;
+
+        const CameraCalibration& getIntrinsic(int cameraIdx){
+            return camera_calibrations[cameraIdx];
+        }
+
+        const Eigen::Matrix4d& getExtrinsicFromBody(int cameraIdx){
+            return T_SC[cameraIdx];
+        }
+
+        Eigen::Matrix4d getExtrinsicFromCamera(int cameraIdxFrom, int cameraIdxTo){
+            return T_SC[cameraIdxFrom].inverse()*T_SC[cameraIdxTo];
+        }
+
+        //TODO: Load
+
+        //TODO: add camera types
+
+        //TODO: add checks for cameraIdx out of bounds
+    };//MultiCameraSystem
+
     /** A set of images taken on the same frame, possibly by multiple instruments/cameras */
     class MultiCameraFrame {
     public:
+    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+        typedef std::shared_ptr<MultiCameraFrame> Ptr;
+
         /** Timestamp of the frame (may be -1 if not available) */
-        double timestamp;
+        double timestamp_;
 
         /** Vector of images in the frame */
-        std::vector<cv::Mat> images;
+        std::vector<cv::Mat> images_;
 
-        /** Transformations matrices of the images (may be empty if transforms not available) */
-        std::vector<cv::Mat> vecTcw;
+        /** Transformation matrix of the sensor body in keyframe coordinates 
+         ** This may be Identity if transforms not available
+         ** This should be set to world coordinates if keyframeId is -1 */
+        Eigen::Matrix4d T_KS_;
+        /** Tranformation matrices of the cameras WRT sensor body */
+        //std::vector<Eigen::Matrix4d> T_SC_;
+
+        /** Pointer to camera setup */
+        MultiCameraSystem::Ptr cameraSystem_;
 
         /** ID of the frame (may be -1 if not available) */
-        int frameId;
+        int frameId_;
+
+        /** ID of the keyframe for this frame (may be -1 if not available) */
+        int keyframeId_;
+
+        /** Pointer to keyframe for this frame (may be nullptr if not available) */
+        MultiCameraFrame::Ptr keyframe_;
+
+        /** Flag set if this frame is a keyframe */
+        bool isKeyframe_;
+        //The following memebers are only set if the fame is a keyframe
+
+        /** Original world position of the Keyframe */
+        Eigen::Matrix4d T_WS_; 
+        /** Optimized world position of the Keyframe */
+        Eigen::Matrix4d T_WS_Optimized_; 
+        bool optimized_;
+
+        /** Keypoints and Descriptors extracted by the SLAM System 
+         ** A vector of keypoints is kept for each image
+         ** A cv::Mat of all descriptors is kept for each image */
+        std::vector<std::vector<cv::KeyPoint > > keypoints_; 
+        std::vector<cv::Mat> descriptors_;
+
+        /** ID of the previous keyframe (may be -1 if not available) */
+        int previousKeyframeId_;
+        /** Pointer to the keyframe (may be nullptr if not available) */
+        MultiCameraFrame::Ptr previousKeyframe_;
+
+
+
+
 
         /** Construct an empty MultiCameraFrame with the given ID (default -1) */
-        explicit MultiCameraFrame(int frame_id = -1){
-            frameId = frame_id;
+        explicit MultiCameraFrame(int frame_id = -1):
+        optimized_(false){
+            frameId_ = frame_id;
         }
 
         /** Construct a MultiCameraFrame from the given images,
-          * transformation matrix, and frame ID*/
-        MultiCameraFrame(std::vector<cv::Mat> images,
-            std::vector<cv::Mat> vecTcw = std::vector<cv::Mat>(), int frame_id = -1){
-            this->images = images;
-            this->vecTcw = vecTcw;
-            frameId = frame_id;
+          * camera system, and frame ID*/
+        MultiCameraFrame(std::vector<cv::Mat> images, Eigen::Matrix4d T_KS,
+            MultiCameraSystem::Ptr cameraSystem = MultiCameraSystem::Ptr(), 
+            int frame_id = -1, int keyframe_id = -1):
+            optimized_(false),
+            cameraSystem_(cameraSystem){
+            this->images_ = images;
+            this->T_KS_ = T_KS;
+            frameId_ = frame_id;
+            keyframeId_ = keyframe_id;
         }
 
         /** Construct a MultiCameraFrame from the given image,
-          * transformation matrix, and frame ID */
-        MultiCameraFrame(cv::Mat image, cv::Mat Tcw = cv::Mat(), int frame_id = -1){
-            images.push_back(image);
-            vecTcw.push_back(Tcw);
-            frameId = frame_id;
+            and camera system, and frame ID */
+        MultiCameraFrame(cv::Mat image, Eigen::Matrix4d T_KS, 
+            MultiCameraSystem::Ptr cameraSystem = MultiCameraSystem::Ptr(), 
+            int frame_id = -1, int keyframe_id = -1):
+            optimized_(false),
+            cameraSystem_(cameraSystem){
+            images_.push_back(image);
+            this->T_KS_ = T_KS;
+            frameId_ = frame_id;
+            keyframeId_ = keyframe_id;
         }
 
         /** Copy constructor for MultiCameraFrame */
         MultiCameraFrame(const MultiCameraFrame & frame) :
-            images(frame.images.size()), vecTcw(frame.vecTcw.size()), frameId(frame.frameId)
+            images_(frame.images_.size()), cameraSystem_(frame.cameraSystem_), 
+            frameId_(frame.frameId_), keyframeId_(frame.keyframeId_), optimized_(frame.optimized_)
         {   
-            for (size_t i = 0; i < frame.vecTcw.size(); i++) {
-                frame.vecTcw[i].copyTo(vecTcw[i]);
+            T_KS_ = frame.T_KS_;
+            for (size_t i = 0; i < frame.images_.size(); i++) {
+                frame.images_[i].copyTo(images_[i]);
             }
-            for (size_t i = 0; i < frame.images.size(); i++) {
-                frame.images[i].copyTo(images[i]);
+            keyframe_ = frame.keyframe_;
+            T_WS_ = frame.T_WS_;
+            isKeyframe_=frame.isKeyframe_;
+            keypoints_.resize(frame.keypoints_.size());
+            if(isKeyframe_){
+                for(size_t i =0 ; i < frame.keypoints_.size(); i++) {
+                    keypoints_[i] = frame.keypoints_[i];
+                }
+                for(size_t i =0 ; i < frame.descriptors_.size(); i++) {
+                    frame.descriptors_[i].copyTo(descriptors_[i]);
+                }
+                previousKeyframeId_ = frame.previousKeyframeId_;
+                previousKeyframe_ = frame.previousKeyframe_;
             }
         }
 
         /** Move constructor for MultiCameraFrame */
         MultiCameraFrame(const MultiCameraFrame && frame)
         {   
-            images = std::move(frame.images);
-            vecTcw = std::move(frame.vecTcw);
-            frameId = std::move(frame.frameId);
+            images_ = std::move(frame.images_);
+            T_KS_ = std::move(frame.T_KS_);
+            optimized_ = std::move(frame.optimized_);
+            cameraSystem_ = std::move(frame.cameraSystem_);
+            frameId_ = std::move(frame.frameId_);
+            keyframeId_ = std::move(frame.keyframeId_);
+            T_WS_ = std::move(frame.T_WS_);
+            keyframe_ = std::move(frame.keyframe_);
+            isKeyframe_= std::move(frame.isKeyframe_);
+            keypoints_ = std::move(frame.keypoints_);
+            descriptors_ = std::move(frame.descriptors_);
+            previousKeyframeId_ = std::move(frame.previousKeyframeId_);
+            previousKeyframe_ = std::move(frame.previousKeyframe_);
         }
 
         /** Move assignment for MultiCameraFrame */
         MultiCameraFrame & operator=(MultiCameraFrame && other)
         {
             if (this != &other) {
-                images = std::move(other.images);
-                vecTcw = std::move(other.vecTcw);
-                frameId = std::move(other.frameId);
+                images_ = std::move(other.images_);
+                T_KS_ = std::move(other.T_KS_);
+                optimized_ = std::move(other.optimized_);
+                cameraSystem_ = std::move(other.cameraSystem_);
+                frameId_ = std::move(other.frameId_);
+                keyframeId_ = std::move(other.keyframeId_);
+                T_WS_ = std::move(other.T_WS_);
+                keyframe_ = std::move(other.keyframe_);
+                isKeyframe_= std::move(other.isKeyframe_);
+                keypoints_ = std::move(other.keypoints_);
+                descriptors_ = std::move(other.descriptors_);
+                previousKeyframeId_ = std::move(other.previousKeyframeId_);
+                previousKeyframe_ = std::move(other.previousKeyframe_);
             }
             return *this;
         }
 
-        typedef std::shared_ptr<MultiCameraFrame> Ptr;
+        const std::vector<cv::KeyPoint>& keypoints(int cameraIdx){
+            return keypoints_[cameraIdx];
+        }
+
+        const cv::Mat& descriptors(int cameraIdx){
+            return descriptors_[cameraIdx];
+        }
+
+        void descriptorsAsVec(int cameraIdx, std::vector<cv::Mat>& out){
+            out.clear();
+            out.reserve(descriptors_[cameraIdx].rows);
+            for(int i=0; i<descriptors_[cameraIdx].rows; i++){
+              out.emplace_back(descriptors_[cameraIdx].row(i));
+            } 
+        }
+        //make threadsafe setting of transform
+
+        //make threadsafe
+        Eigen::Matrix4d T_WS()
+        {
+            if(!isKeyframe_){
+                if(keyframeId_!=-1 && keyframe_.get()!=nullptr)
+                    return keyframe_->T_WS()*T_KS_;
+                else 
+                    return T_KS_;
+            }else if(optimized_){
+                return T_WS_Optimized_;
+            }else
+                return T_WS_;
+        }
+
+        Eigen::Matrix4d T_WC(int cameraIdx){
+            if(cameraSystem_.get()!=nullptr){
+                return T_WS()*cameraSystem_->getExtrinsicFromBody(cameraIdx);
+            }else
+                return T_WS();
+        }
+
+        void setOptimizedTransform(const Eigen::Matrix4d& T_WS_in){
+            T_WS_Optimized_ = T_WS_in;
+            optimized_ = true;
+        }
+
     };
 }

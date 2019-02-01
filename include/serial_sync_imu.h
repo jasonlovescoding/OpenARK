@@ -101,7 +101,9 @@ namespace ark {
 
         double getFrameTimestamp(long frame_num){
             ImgTimeInfo img_time;
-            while(img_queue_.try_dequeue(&img_time) || img_time.id<frame_num);
+            while(img_time.id!=frame_num){
+                img_queue_.try_dequeue(&img_time);
+            }
             return double(img_time.timestamp*1e6); //convert to nanoseconds
         };
 
@@ -160,10 +162,12 @@ namespace ark {
                     new_img_time.id=*(uint32_t*)(buff_in+it);
                     it+=sizeof(uint32_t);
                     if(buff_in[it]==IMG_FOOTR){
+                        if(new_img_time.id < frame_count_)
+                            img_queue_.clear();
                         frame_count_=new_img_time.id;
                         img_queue_.enqueue(new_img_time);
-                    //    std::cout << "IMG: " << new_img_time.timestamp << " , " 
-                    //        << new_img_time.id << std::endl;
+                        //std::cout << "IMG: " << new_img_time.timestamp << " , " 
+                        //    << new_img_time.id << std::endl;
                     }else{
                         it-=IMG_DATA_SIZE+1;
                     }

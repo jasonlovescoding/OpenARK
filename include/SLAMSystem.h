@@ -12,8 +12,8 @@
 
 namespace ark {
 
-    typedef std::function<void(const MultiCameraFrame &)> KeyFrameAvailableHandler;
-    typedef std::function<void(const MultiCameraFrame &)> FrameAvailableHandler;
+    typedef std::function<void(MultiCameraFrame::Ptr)> KeyFrameAvailableHandler;
+    typedef std::function<void(MultiCameraFrame::Ptr)> FrameAvailableHandler;
     typedef std::function<void(void)> LoopClosureDetectedHandler;
     typedef std::unordered_map<std::string, KeyFrameAvailableHandler> MapKeyFrameAvailableHandler;
     typedef std::unordered_map<std::string, FrameAvailableHandler> MapFrameAvailableHandler;

@@ -4,7 +4,8 @@
 namespace ark {
 
     OkvisSLAMSystem::OkvisSLAMSystem(const std::string & strVocFile, const std::string & strSettingsFile) :
-        start_(0.0), t_imu_(0.0), deltaT_(1.0), num_frames_(0), kill(false) {
+        start_(0.0), t_imu_(0.0), deltaT_(1.0), num_frames_(0), kill(false), 
+        sparseMap_(true,strVocFile,true,new brisk::BruteForceMatcher()),cameraSystem_(new MultiCameraSystem()) {
 
         okvis::VioParametersReader vio_parameters_reader;
         try {
@@ -18,41 +19,75 @@ namespace ark {
         //okvis::VioParameters parameters;
         vio_parameters_reader.getParameters(parameters_);
 
-        okvis_estimator_ = std::make_shared<okvis::ThreadedKFVio>(parameters_, strVocFile);
+        //create multicamera system from parameters
+        //cameraSystem_.reset(new MultiCameraSystem());
+        /*okvis::kinematics::Transformation T_SC;
+        Eigen::VectorXd intr=Eigen::Matrix<double, 8, 1>::Identity(); //This should not be necessary, seems like Eigen bug? 
+        for(size_t i =0; i< parameters_.nCameraSystem.numCameras(); i++){
+            T_SC = *(parameters_.nCameraSystem.T_SC(i));
+            parameters_.nCameraSystem.cameraGeometry(i)->getIntrinsics(intr);
+            cameraSystem_->T_SC.push_back(T_SC.T());
+            CameraCalibration cam_calib(intr[0],intr[1],intr[2],intr[3]);            
+            //NOTE: assuming 4 parameter, pinhole distortion, need to add check 
+            cam_calib.setDistortionCoefficients(intr[4],intr[5],intr[6],intr[7]);
+            cameraSystem_->camera_calibrations.push_back(cam_calib);
 
+        }
+        for(size_t i =0; i< parameters_.secondaryCameraSystem.numCameras(); i++){
+            T_SC = *(parameters_.secondaryCameraSystem.T_SC(i));
+            parameters_.secondaryCameraSystem.cameraGeometry(i)->getIntrinsics(intr);
+            cameraSystem_->T_SC.push_back(T_SC.T());
+            CameraCalibration cam_calib(intr[0],intr[1],intr[2],intr[3]);            
+            //NOTE: assuming 4 parameter, pinhole distortion, need to add check 
+            cam_calib.setDistortionCoefficients(intr[4],intr[5],intr[6],intr[7]);
+            cameraSystem_->camera_calibrations.push_back(cam_calib);
+
+        }*/
+
+        //initialize Visual odometry
+        okvis_estimator_ = std::make_shared<okvis::ThreadedKFVio>(parameters_);
         okvis_estimator_->setBlocking(false);
 
         //register callback
-        auto path_callback = [this](const okvis::Time& timestamp, const std::vector<okvis::kinematics::Transformation> & path, bool loopClosure) {
+        /*auto path_callback = [this](const okvis::Time& timestamp, const std::vector<okvis::kinematics::Transformation> & path, bool loopClosure) {
             path_queue_.enqueue({ path, timestamp, loopClosure });
         };
 
         auto state_callback = [this](const okvis::Time& timestamp, const okvis::kinematics::Transformation& T_WS) {
             state_queue_.enqueue({ T_WS,timestamp });
             //std::cout << "state callback: " << timestamp << std::endl;
+        };*/
+
+        //Okvis's outframe is our inframe
+        auto frame_callback = [this](const okvis::Time& timestamp, okvis::OutFrameData::Ptr frame_data) {
+            frame_data_queue_.enqueue({ frame_data,timestamp });
         };
 
-        okvis_estimator_->setPathCallback(
+        /*okvis_estimator_->setPathCallback(
             path_callback);
 
         okvis_estimator_->setStateCallback(
-            state_callback);
+            state_callback);*/
+
+        okvis_estimator_->setFrameCallback(frame_callback);
 
         //at thread to pull from queue and call our own callbacks
-        keyFrameConsumerThread_ = std::thread(&OkvisSLAMSystem::KeyFrameConsumerLoop, this);
+        //keyFrameConsumerThread_ = std::thread(&OkvisSLAMSystem::KeyFrameConsumerLoop, this);
         frameConsumerThread_ = std::thread(&OkvisSLAMSystem::FrameConsumerLoop, this);
 
-        path_queue_.clear();
-        state_queue_.clear();
+        //path_queue_.clear();
+        //state_queue_.clear();
+        frame_data_queue_.clear();
         frame_queue_.clear();
-        image_queue_.clear();
+        std::cout << "SLAM Initialized\n";
+        //image_queue_.clear();
     }
 
     void OkvisSLAMSystem::Start() {
         //Do nothing, starts automatically
     }
 
-    void OkvisSLAMSystem::KeyFrameConsumerLoop() {
+    /*void OkvisSLAMSystem::KeyFrameConsumerLoop() {
         while (true) {
             StampedPath path;
             while (!path_queue_.try_dequeue(&path)) {
@@ -111,9 +146,9 @@ namespace ark {
 
         }
 
-    }
+    }*/
 
-    void OkvisSLAMSystem::FrameConsumerLoop() {
+/*    void OkvisSLAMSystem::FrameConsumerLoop() {
         while (true) {
             //switch this to frame and then wait for state near frame
             StampedState state;
@@ -164,6 +199,95 @@ namespace ark {
                 }
             }
         }
+    }*/
+
+    void OkvisSLAMSystem::FrameConsumerLoop() {
+        while (true) {
+            //Get processed frame data from OKVIS
+            StampedFrameData frame_data;
+            while (!frame_data_queue_.try_dequeue(&frame_data)) {
+                if(kill)
+                    return;
+                std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            }
+            //Get the corresponding frame from queue
+            StampedImages frame;
+            bool frame_found = false;
+            do {
+                if (!(frame_found = frame_queue_.try_dequeue(&frame))) {
+                    break;
+                } 
+            } while (frame.timestamp < frame_data.timestamp);
+            if (!frame_found){
+                std::cout << "ERROR, FRAME NOT FOUND, THIS SHOULDN'T HAPPEN\n";
+                continue;
+            }
+
+            //construct output frame
+            MultiCameraFrame::Ptr out_frame = MultiCameraFrame::Ptr(new MultiCameraFrame);
+            out_frame->images_ = frame.images;
+            out_frame->frameId_ = frame_data.data->id;
+            out_frame->T_KS_ = frame_data.data->T_KS.T();
+            out_frame->T_WS_ = frame_data.data->T_WS.T();
+            out_frame->keyframeId_ = frame_data.data->keyframe_id;
+            out_frame->keyframe_ = sparseMap_.getKeyframe(out_frame->keyframeId_);
+            out_frame->isKeyframe_ = frame_data.data->is_keyframe;
+
+            //add sensor transforms
+            //Note: this could potentially just be done once for the system
+            //Including here for now in case we switch to optimized results
+            /*for (size_t i = 0; i < frame.images.size(); i++) {
+                okvis::kinematics::Transformation T_SC;
+                if (i < parameters_.nCameraSystem.numCameras()) {
+                    T_SC = (*parameters_.nCameraSystem.T_SC(i));
+                }
+                else if (i - parameters_.nCameraSystem.numCameras() < parameters_.secondaryCameraSystem.numCameras()) {
+                    T_SC = (*parameters_.secondaryCameraSystem.T_SC(i - parameters_.nCameraSystem.numCameras()));
+                } else {
+                    //no relationship data to imu
+                    //TODO: throw errror
+                    T_SC = okvis::kinematics::Transformation::Identity();
+                }
+                out_frame->T_SC_.push_back(T_SC.T());
+            }*/
+            //out_frame->cameraSystem_=cameraSystem_;
+
+            //check if keyframe
+            if(out_frame->isKeyframe_){
+                if(out_frame->keyframeId_!=out_frame->frameId_){
+                    std::cout << "ERROR, KEYFRAME ID INCORRECT, THIS SHOULDN'T HAPPEN\n";
+                    continue;
+                }
+                //copy keypoints and descriptors to output
+                out_frame->keypoints_.resize(frame_data.data->keypoints.size());
+                out_frame->descriptors_.resize(frame_data.data->descriptors.size());
+                for(size_t cam_idx=0 ; cam_idx<frame_data.data->keypoints.size() ; cam_idx++){
+                    out_frame->keypoints_[cam_idx].resize(frame_data.data->keypoints[cam_idx].size());
+                    for(int i=0; i<frame_data.data->keypoints[cam_idx].size(); i++){
+                        out_frame->keypoints_[cam_idx][i] = frame_data.data->keypoints[cam_idx][i];
+                    }
+                    out_frame->descriptors_[cam_idx]=frame_data.data->descriptors[cam_idx];
+                }
+
+                // push to map
+                // may still need to add 3d points in camera coordinates
+                if(sparseMap_.addKeyframe(out_frame)){ //add keyframe returns true if a loop closure was detected
+                    for (MapLoopClosureDetectedHandler::const_iterator callback_iter = mMapLoopClosureHandler.begin();
+                        callback_iter != mMapLoopClosureHandler.end(); ++callback_iter) {
+                        const MapLoopClosureDetectedHandler::value_type& pair = *callback_iter;
+                            pair.second();
+                    }
+                }
+            }
+
+
+            //Notify callbacks
+            for (MapFrameAvailableHandler::const_iterator callback_iter = mMapFrameAvailableHandler.begin();
+                callback_iter != mMapFrameAvailableHandler.end(); ++callback_iter) {
+                const MapFrameAvailableHandler::value_type& pair = *callback_iter;
+                pair.second(out_frame);
+            }
+        }
     }
 
     void OkvisSLAMSystem::PushFrame(const std::vector<cv::Mat>& images, const double &timestamp) {
@@ -177,17 +301,17 @@ namespace ark {
         if (t_image - start_ > deltaT_) {
             //right now we are keeping two queues, one for frame callback and one for keyframe callback
             //will change to be more efficient later
-            if(mMapKeyFrameAvailableHandler.size()>0){
+            /*if(mMapKeyFrameAvailableHandler.size()>0){
                 image_queue_.enqueue({ images,t_image,num_frames_ });
                 std::cout << "enqueue: " << t_image << std::endl;
-            }
+            }*/
             if(mMapFrameAvailableHandler.size()>0){
                 frame_queue_.enqueue({ images,t_image,num_frames_ });
             }
             num_frames_++;
             for (size_t i = 0; i < images.size(); i++) {
                 if (i < parameters_.nCameraSystem.numCameras())
-                    printf("add image: %i\n", i);
+                    //printf("add image: %i\n", i);
                     okvis_estimator_->addImage(t_image, i, images[i]);
             }
         }
@@ -204,10 +328,10 @@ namespace ark {
         if (t_image - start_ > deltaT_) {
             std::vector<cv::Mat> images;
             images.push_back(image);
-            if(mMapKeyFrameAvailableHandler.size()>0){
+            /*if(mMapKeyFrameAvailableHandler.size()>0){
                 image_queue_.enqueue({ images,t_image,num_frames_ });
                 std::cout << "enqueue: " << t_image << std::endl;
-            }
+            }*/
             if(mMapFrameAvailableHandler.size()>0){
                 frame_queue_.enqueue({ images,t_image,num_frames_ });
             }
@@ -248,21 +372,23 @@ namespace ark {
 
     void OkvisSLAMSystem::ShutDown()
     {
-        path_queue_.clear();
-        state_queue_.clear();
+        //path_queue_.clear();
+        //state_queue_.clear();
         frame_queue_.clear();
-        image_queue_.clear();
+        frame_data_queue_.clear();
+        //image_queue_.clear();
         kill=true;
-        keyFrameConsumerThread_.join();
+        //keyFrameConsumerThread_.join();
         frameConsumerThread_.join();
         okvis_estimator_.reset();
     }
 
     OkvisSLAMSystem::~OkvisSLAMSystem() {
-        path_queue_.clear();
-        state_queue_.clear();
+        //path_queue_.clear();
+        //state_queue_.clear();
         frame_queue_.clear();
-        image_queue_.clear();
+        frame_data_queue_.clear();
+        //image_queue_.clear();
         kill=true;
     }
 
@@ -274,6 +400,10 @@ namespace ark {
     bool OkvisSLAMSystem::IsRunning()
     {
         return okvis_estimator_ == nullptr;
+    }
+
+    void OkvisSLAMSystem::getTrajectory(std::vector<Eigen::Matrix4d>& trajOut){
+        sparseMap_.getTrajectory(trajOut);
     }
 
 

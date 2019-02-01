@@ -94,24 +94,24 @@ namespace ark {
       rs2::frameset data;
 
       try {
-          frame.images.resize(2);
+          frame.images_.resize(2);
 
           data = pipe->wait_for_frames();
 
           if (useRGBStream) {
-              if (frame.images[1].empty()) frame.images[0] = cv::Mat(getImageSize(), CV_8UC3);
+              if (frame.images_[1].empty()) frame.images_[0] = cv::Mat(getImageSize(), CV_8UC3);
               rs2::frame color = data.first(RS2_STREAM_COLOR);
-              memcpy(frame.images[0].data, color.get_data(), 3 * width * height);
+              memcpy(frame.images_[0].data, color.get_data(), 3 * width * height);
           }
           else {
-              if (frame.images[1].empty()) frame.images[0] = cv::Mat(getImageSize(), CV_8UC1);
+              if (frame.images_[1].empty()) frame.images_[0] = cv::Mat(getImageSize(), CV_8UC1);
               rs2::frame ir = data.first(RS2_STREAM_INFRARED);
-              memcpy(frame.images[1].data, ir.get_data(), width * height);
+              memcpy(frame.images_[1].data, ir.get_data(), width * height);
           }
 
-          if (frame.images[0].empty()) frame.images[0] = cv::Mat(getImageSize(), CV_32FC3);
+          if (frame.images_[0].empty()) frame.images_[0] = cv::Mat(getImageSize(), CV_32FC3);
           rs2::frame depth = data.first(RS2_STREAM_DEPTH);
-          project(depth, frame.images[0]);
+          project(depth, frame.images_[0]);
       } catch (std::runtime_error e) {
           // try reconnecting
           badInputFlag = true;

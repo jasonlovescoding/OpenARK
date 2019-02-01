@@ -39,7 +39,7 @@ namespace ark {
     bool DepthCamera::nextFrame(bool removeNoise)
     {
         MultiCameraFrame::Ptr frameBuf =
-            std::make_shared<MultiCameraFrame>(frame ? frame->frameId + 1 : 0);
+            std::make_shared<MultiCameraFrame>(frame ? frame->frameId_ + 1 : 0);
 
         // update the backbuffer frame (to allow continued use of images on other threads)
         update(*frameBuf);
@@ -133,7 +133,7 @@ namespace ark {
     int DepthCamera::getFrameID() const
     {
         if (frame == nullptr) return 0;
-        return frame->frameId;
+        return frame->frameId_;
     }
 
     const std::string DepthCamera::getModelName() const {
@@ -148,10 +148,10 @@ namespace ark {
         cv::FileStorage fs(destination, cv::FileStorage::WRITE);
         std::lock_guard<std::mutex> lock(imageMutex);
 
-        int N = (int) frame->images.size();
+        int N = (int) frame->images_.size();
         fs << "num_img" << N;
         for (int i = 0; i < N; ++i) {
-            fs << ("img" + std::to_string(i)) << frame->images[i];
+            fs << ("img" + std::to_string(i)) << frame->images_[i];
         }
 
         fs.release();
@@ -161,9 +161,9 @@ namespace ark {
     const cv::Mat DepthCamera::getFrameImage(int idx, int default_type) const
     {
         std::lock_guard<std::mutex> lock(imageMutex);
-        if (frame == nullptr || frame->images.size() <= idx || frame->images[idx].empty())
+        if (frame == nullptr || frame->images_.size() <= idx || frame->images_[idx].empty())
             return cv::Mat::zeros(getImageSize(), default_type);
-        return frame->images[idx];
+        return frame->images_[idx];
     }
 
     /**
@@ -180,7 +180,7 @@ namespace ark {
         for (int i = 0; i < N; ++i) {
             cv::Mat m;
             fs["img" + std::to_string(i)] >> m;
-            frame->images.push_back(m);
+            frame->images_.push_back(m);
         }
         fs.release();
 

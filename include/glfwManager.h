@@ -220,6 +220,10 @@ public:
 		nodes.push_back(node);
 	}
 
+	void clear(){
+		nodes.clear();
+	}
+
 	void set_color(Eigen::Vector3d obj_color){
 		color = obj_color;
 	}

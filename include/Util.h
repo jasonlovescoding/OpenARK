@@ -3,6 +3,7 @@
 #include <vector>
 #include <string>
 #include "Version.h"
+#include <pcl/point_cloud.h>
 
 namespace ark {
     /**
@@ -532,5 +533,34 @@ namespace ark {
         private:
             bool reverse = false, compare_y_then_x = false;
         };
+
+        /** Converts an xyz_map into a PCL point cloud
+         * @param flip_z if true, inverts the z coordinate of each point
+         */
+        template<class T>
+        typename pcl::PointCloud<T>::Ptr toPointCloud(const cv::Mat & xyz_map, 
+            bool flip_z = false, bool flip_y = false){
+            typename pcl::PointCloud<T>::Ptr out_pc(new pcl::PointCloud<T>);
+            out_pc->height = xyz_map.rows;
+            out_pc->width = xyz_map.cols;
+            out_pc->is_dense = false;
+            out_pc->resize(out_pc->height * out_pc->width);
+            const Vec3f * ptr;
+            for (int i = 0; i < xyz_map.rows; ++i) {
+                ptr = xyz_map.ptr<Vec3f>(i);
+                for (int j = 0; j < xyz_map.cols; ++j) {
+                    if (ptr[j][2] > 0.001) {
+                        T pt;
+                        pt.x = ptr[j][0];
+                        pt.y = ptr[j][1];
+                        pt.z = ptr[j][2];
+                        if (flip_z) pt.z = -pt.z;
+                        if (flip_y) pt.y = -pt.y;
+                        (*out_pc)(j,i) = pt; //TODO: make sure this is correct and should not be (i,j)
+                    }
+                }
+            }
+            return out_pc;
+        }
     };
 }

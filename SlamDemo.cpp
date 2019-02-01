@@ -45,11 +45,13 @@ int main(int argc, char **argv)
     params.gyro_div =  16.4 *180.0/M_PI;
     params.accel_div = 8192.0/9.81;
     SerialSyncImu imu0("/dev/cu.usbmodem1412101", &params);
-    std::this_thread::sleep_for( std::chrono::duration<double, std::milli>(100));
     printf("Camera initialization started...\n");
+    fflush(stdout);
     D435Camera camera;
-    printf("IMU initialization started...\n");
-    imu0.start();
+    //printf("IMU initialization started...\n");
+    //std::this_thread::sleep_for( std::chrono::duration<double, std::milli>(500));
+    while(!imu0.start());
+    //std::this_thread::sleep_for( std::chrono::duration<double, std::milli>(500));
     camera.enableSync(true);
 
     printf("Camera-IMU initialization complete\n");
@@ -69,21 +71,28 @@ int main(int argc, char **argv)
     path_win.add_object(&grid1);
 
     //Recieves output from SLAM system and displays to the screen
-    FrameAvailableHandler handler([&path1, &axis2, &img_win](MultiCameraFrame frame) {
-        Eigen::Matrix4d eigen_Tcw;
-        cv::cv2eigen(frame.vecTcw[0],eigen_Tcw);
-        Eigen::Affine3d transform(eigen_Tcw.inverse());
+    FrameAvailableHandler handler([&path1, &axis2, &img_win](MultiCameraFrame::Ptr frame) {
+        Eigen::Affine3d transform(frame->T_WS());
         path1.add_node(transform.translation());
         axis2.set_transform(transform);
-        img_win.set_image(frame.images[0]);
+        img_win.set_image(frame->images_[0]);
     });
-    slam.AddKeyFrameAvailableHandler(handler, "mapping");
+    slam.AddFrameAvailableHandler(handler, "mapping");
 
+    LoopClosureDetectedHandler loopHandler([&slam, &path1](void) {
+        std::vector<Eigen::Matrix4d> traj;
+        slam.getTrajectory(traj);
+        path1.clear();
+        for(size_t i=0; i<traj.size(); i++){
+            path1.add_node(traj[i].block<3,1>(0,3));
+        }
+    });
+    slam.AddLoopClosureDetectedHandler(loopHandler,"trajectoryUpdate");
     //run until display is closed
     okvis::Time start(0.0);
     int id =0;
     while (MyGUI::Manager::running()){
-        printf("test\n");
+        //printf("test\n");
         //Update the display
         MyGUI::Manager::update();
 
@@ -92,16 +101,17 @@ int main(int argc, char **argv)
         camera.update(frame);
 
         //Get timestamp of camera
-        frame.timestamp = imu0.getFrameTimestamp(frame.frameId);//
-        printf("frame ts: %f\n",frame.timestamp/1e9);
+        //printf("getTs: %i\n",frame.frameId_);
+        frame.timestamp_ = imu0.getFrameTimestamp(frame.frameId_);//
+        //printf("frame ts: %f\n",frame.timestamp_/1e9);
 
         //Get or wait for IMU Data until current frame 
         std::vector<ImuPair> imuData;
-        imu0.getImuToTime(frame.timestamp,imuData);
+        imu0.getImuToTime(frame.timestamp_,imuData);
 
         //Add data to SLAM system
         slam.PushIMU(imuData);
-        slam.PushFrame(frame.images, frame.timestamp);
+        slam.PushFrame(frame.images_, frame.timestamp_);
 
         int k = cv::waitKey(1);
         if (k == 'q' || k == 'Q' || k == 27) break; // 27 is ESC
