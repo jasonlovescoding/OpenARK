@@ -24,7 +24,7 @@ class SparseMap {
  public:
 
   SparseMap(bool useLoopClosures = false, std::string vocabPath = "", bool binaryVocab = true, cv::DescriptorMatcher* matcher = nullptr):
-  useLoopClosures(useLoopClosures),matcher_(matcher),bowId(0),currentKeyframeId(-1)
+  useLoopClosures(useLoopClosures),matcher_(matcher),bowId(0),currentKeyframeId(-1),lastKfTimestamp_(0)
   {
       if(useLoopClosures){
         std::cout << "Loading Vocabulary From: " << vocabPath << std::endl;
@@ -45,6 +45,7 @@ class SparseMap {
         // alpha = 0.3
         // k = 3
         // geom checking = GEOM_DI
+        detectorParams.k=2;
         detectorParams.di_levels = 4;
         detector_.reset(new DLoopDetector::TemplatedLoopDetector<TDescriptor, F>(*vocab_,detectorParams));
         std::cout << "Map Initialized\n";
@@ -57,25 +58,25 @@ class SparseMap {
   void getTrajectory(std::vector<Eigen::Matrix4d>& trajOut){
     trajOut.resize(frameMap_.size());
     size_t i=0;
-    for(std::map<int, MultiCameraFrame::Ptr>::iterator frame = frameMap_.begin(); 
+    for(std::map<int, MapKeyFrame::Ptr>::iterator frame = frameMap_.begin(); 
         frame!=frameMap_.end(); frame++, i++){
       trajOut[i] = frame->second->T_WS();
     }
   }
 
-  MultiCameraFrame::Ptr getCurrentKeyframe(){
+  MapKeyFrame::Ptr getCurrentKeyframe(){
     return getKeyframe(currentKeyframeId);
   };
-  MultiCameraFrame::Ptr getKeyframe(int frameId){
-    std::map<int,MultiCameraFrame::Ptr>::iterator it = frameMap_.find(frameId);
+  MapKeyFrame::Ptr getKeyframe(int frameId){
+    std::map<int,MapKeyFrame::Ptr>::iterator it = frameMap_.find(frameId);
     if(it!=frameMap_.end()){
       return it->second;
     }else {
-      return MultiCameraFrame::Ptr(nullptr);
+      return MapKeyFrame::Ptr(nullptr);
     }
   }
   
-  bool addKeyframe(MultiCameraFrame::Ptr kf){
+  bool addKeyframe(MapKeyFrame::Ptr kf){
     //std::cout << "PROCESS KEYFRAME: " << kf->frameId_ << std::endl;
     frameMap_[kf->frameId_]=kf;
     kf->previousKeyframeId_ = currentKeyframeId;
@@ -84,6 +85,7 @@ class SparseMap {
     Eigen::Matrix4d T_K1K2; 
     if(kf->previousKeyframe_.get()!=nullptr){
       T_K1K2 = kf->previousKeyframe_->T_WS_.inverse()*kf->T_WS_;
+      graph_.AddConstraint(kf->previousKeyframeId_,kf->frameId_,T_K1K2);
       kf->setOptimizedTransform(kf->previousKeyframe_->T_WS()*T_K1K2);
     }else 
       T_K1K2 = Eigen::Matrix4d::Identity();
@@ -91,11 +93,11 @@ class SparseMap {
 
     currentKeyframeId = kf->frameId_;
     graph_.AddPose(kf->frameId_,kf->T_WS());
-    graph_.AddConstraint(kf->previousKeyframeId_,kf->frameId_,T_K1K2);
 
     //std::cout << kf->keypoints(0).size() << " " << kf->descriptors(0).size() << std::endl << std::flush;
-    if(useLoopClosures){
-      bowFrameMap_[bowId]=kf;
+    //only use one timestamp per second for loop closure
+    if(useLoopClosures && kf->timestamp_-lastKfTimestamp_>0.2){
+      lastKfTimestamp_=kf->timestamp_;
       //convert to descriptors to DBoW descriptor format
       std::vector<cv::Mat> bowDesc;
       kf->descriptorsAsVec(0,bowDesc);
@@ -104,8 +106,7 @@ class SparseMap {
       DBoW2::BowVector bowVec;
       DBoW2::FeatureVector featvec;
       detector_->detectLoop(kf->keypoints(0),bowDesc,result);
-      bowId++;
-      MultiCameraFrame::Ptr loop_kf;
+      MapKeyFrame::Ptr loop_kf;
       if(result.detection())
       {
         std::cout << result.match << " " << bowId << std::endl; 
@@ -113,6 +114,8 @@ class SparseMap {
         cout << "- Loop found with image " << loop_kf->frameId_ << "!"
           << endl;
       }else{
+        bowFrameMap_[bowId]=kf;
+        bowId++;
         return false; //pose added to graph, no loop detected, nothing left to do
       }
 
@@ -128,25 +131,32 @@ class SparseMap {
 
       //depth map time
       //get full pointcloud for each frame
-      typename pcl::PointCloud<pcl::PointXYZ>::Ptr kf_cloud = 
+      /*typename pcl::PointCloud<pcl::PointXYZ>::Ptr kf_cloud = 
         util::toPointCloud<pcl::PointXYZ>(kf->images_[2]);
       typename pcl::PointCloud<pcl::PointXYZ>::Ptr loop_kf_cloud = 
         util::toPointCloud<pcl::PointXYZ>(loop_kf->images_[2]);
-
+*/
       //get feature point clouds
       typename pcl::PointCloud<pcl::PointXYZ>::Ptr kf_feat_cloud(new pcl::PointCloud<pcl::PointXYZ>());
       for(int i=0; i<kf->keypoints(0).size(); i++){
-        kf_feat_cloud->points.push_back((*kf_cloud)(kf->keypoints(0)[i].pt.x,kf->keypoints(0)[i].pt.y));
+        //kf_feat_cloud->points.push_back((*kf_cloud)(kf->keypoints(0)[i].pt.x,kf->keypoints(0)[i].pt.y));
+        Eigen::Vector4d kp3dh_C = kf->homogeneousKeypoints3d(0)[i];
+        kf_feat_cloud->points.push_back(pcl::PointXYZ(kp3dh_C[0],kp3dh_C[1],kp3dh_C[2]));
       } 
       typename pcl::PointCloud<pcl::PointXYZ>::Ptr loop_kf_feat_cloud(new pcl::PointCloud<pcl::PointXYZ>());
       for(int i=0; i<loop_kf->keypoints(0).size(); i++){
-        loop_kf_feat_cloud->points.push_back((*loop_kf_cloud)(loop_kf->keypoints(0)[i].pt.x,loop_kf->keypoints(0)[i].pt.y));
+        //loop_kf_feat_cloud->points.push_back((*loop_kf_cloud)(loop_kf->keypoints(0)[i].pt.x,loop_kf->keypoints(0)[i].pt.y));
+        Eigen::Vector4d kp3dh_C = loop_kf->homogeneousKeypoints3d(0)[i];
+        loop_kf_feat_cloud->points.push_back(pcl::PointXYZ(kp3dh_C[0],kp3dh_C[1],kp3dh_C[2]));
       }           
 
       //convert DMatch to correspondence
       std::vector<int> correspondences(matches.size());
       for(int i=0; i<matches.size(); i++){
-        correspondences[matches[i].queryIdx]=matches[i].trainIdx;
+        if(loop_kf->homogeneousKeypoints3d(0)[matches[i].queryIdx][3]!=0 && loop_kf->homogeneousKeypoints3d(0)[matches[i].trainIdx][3]!=0)
+          correspondences[matches[i].queryIdx]=matches[i].trainIdx;
+        else
+          correspondences[matches[i].queryIdx]=-1;;
       }
 
       int numInliers;
@@ -156,7 +166,7 @@ class SparseMap {
       CorrespondenceRansac<pcl::PointXYZ>::getInliersWithTransform(
             kf_feat_cloud, loop_kf_feat_cloud, correspondences,
             3, 0.2, 50, numInliers, inliers, transformEstimate);
-      if(((float)numInliers)/correspondences.size()<0.1)
+      if(((float)numInliers)/correspondences.size()<0.3)
         return false; //transform unreliable
       std::cout << "inliers: " << numInliers << " / " << correspondences.size() << std::endl;
 
@@ -171,7 +181,7 @@ class SparseMap {
       //transformEstimate = ICP<pcl::PointXYZ>::match(kf_cloud,loop_kf_cloud,3,0.2,50,3,transformEstimate);
       graph_.AddConstraint(kf->frameId_,loop_kf->frameId_,transformEstimate.matrix());
       graph_.optimize();
-      for(std::map<int, MultiCameraFrame::Ptr>::iterator frame=frameMap_.begin();
+      for(std::map<int, MapKeyFrame::Ptr>::iterator frame=frameMap_.begin();
         frame!=frameMap_.end(); frame++){
         frame->second->setOptimizedTransform(graph_.getTransformById(frame->first));
       }
@@ -263,8 +273,8 @@ class SparseMap {
   //std::unique_ptr<DBoW2::TemplatedDatabase<TDescriptor, F> > db_;
   std::unique_ptr<DLoopDetector::TemplatedLoopDetector<TDescriptor, F> >detector_;
   std::shared_ptr<cv::DescriptorMatcher> matcher_;
-  std::map<int, MultiCameraFrame::Ptr> frameMap_;
-  std::map<int, MultiCameraFrame::Ptr> bowFrameMap_;
+  std::map<int, MapKeyFrame::Ptr> frameMap_;
+  std::map<int, MapKeyFrame::Ptr> bowFrameMap_;
 
   DBoW2::EntryId lastEntry_;
   bool useLoopClosures;
@@ -272,6 +282,7 @@ class SparseMap {
   int bowId;
 
   SimplePoseGraphSolver graph_;
+  double lastKfTimestamp_;
 
 
 

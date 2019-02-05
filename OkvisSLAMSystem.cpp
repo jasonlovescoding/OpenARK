@@ -228,10 +228,9 @@ namespace ark {
             out_frame->images_ = frame.images;
             out_frame->frameId_ = frame_data.data->id;
             out_frame->T_KS_ = frame_data.data->T_KS.T();
-            out_frame->T_WS_ = frame_data.data->T_WS.T();
             out_frame->keyframeId_ = frame_data.data->keyframe_id;
-            out_frame->keyframe_ = sparseMap_.getKeyframe(out_frame->keyframeId_);
-            out_frame->isKeyframe_ = frame_data.data->is_keyframe;
+            out_frame->timestamp_ = frame.timestamp.toSec();
+            //out_frame->isKeyframe_ = frame_data.data->is_keyframe;
 
             //add sensor transforms
             //Note: this could potentially just be done once for the system
@@ -253,25 +252,44 @@ namespace ark {
             //out_frame->cameraSystem_=cameraSystem_;
 
             //check if keyframe
-            if(out_frame->isKeyframe_){
+            if(frame_data.data->is_keyframe){
                 if(out_frame->keyframeId_!=out_frame->frameId_){
                     std::cout << "ERROR, KEYFRAME ID INCORRECT, THIS SHOULDN'T HAPPEN\n";
                     continue;
                 }
+                MapKeyFrame::Ptr keyframe = MapKeyFrame::Ptr(new MapKeyFrame);
+                keyframe->frameId_=out_frame->frameId_;
+                keyframe->T_WS_ = frame_data.data->T_WS.T();
+                keyframe->timestamp_ = out_frame->timestamp_;
                 //copy keypoints and descriptors to output
-                out_frame->keypoints_.resize(frame_data.data->keypoints.size());
-                out_frame->descriptors_.resize(frame_data.data->descriptors.size());
+                keyframe->keypoints_.resize(frame_data.data->keypoints.size());
+                keyframe->keypoints3dh_C.resize(frame_data.data->keypoints.size());
+                keyframe->descriptors_.resize(frame_data.data->descriptors.size());
                 for(size_t cam_idx=0 ; cam_idx<frame_data.data->keypoints.size() ; cam_idx++){
-                    out_frame->keypoints_[cam_idx].resize(frame_data.data->keypoints[cam_idx].size());
+                    keyframe->keypoints_[cam_idx].resize(frame_data.data->keypoints[cam_idx].size());  
+
+                    keyframe->keypoints3dh_C[cam_idx].resize(frame_data.data->keypoints[cam_idx].size());
+                    //get transform of the camera
+                    //okvis::kinematics::Transformation T_SC = *parameters_.nCameraSystem.T_SC(cam_idx);
+                    //okvis::kinematics::Transformation T_CW = (frame_data.data->T_WS*T_SC).inverse();
                     for(int i=0; i<frame_data.data->keypoints[cam_idx].size(); i++){
-                        out_frame->keypoints_[cam_idx][i] = frame_data.data->keypoints[cam_idx][i];
+                        //copy keypoint
+                        keyframe->keypoints_[cam_idx][i] = frame_data.data->keypoints[cam_idx][i];
+                        //get estimated 3d position of keypoint in current camera frame
+                        //Eigen::Vector4d l_W = frame_data.data->observations[cam_idx][i].landmark_W;
+                        //keyframe->keypoints3dh_C[cam_idx][i] = T_CW*l_W;
+                        cv::Vec3f pt3d = out_frame->images_[2].at<cv::Vec3f>(std::round(keyframe->keypoints_[cam_idx][i].pt.y),std::round(keyframe->keypoints_[cam_idx][i].pt.x));
+                        if(pt3d[2] >0)
+                            keyframe->keypoints3dh_C[cam_idx][i] = Eigen::Vector4d(pt3d[0],pt3d[1],pt3d[2],1);
+                        else
+                            keyframe->keypoints3dh_C[cam_idx][i] = Eigen::Vector4d(0,0,0,0);
                     }
-                    out_frame->descriptors_[cam_idx]=frame_data.data->descriptors[cam_idx];
+                    keyframe->descriptors_[cam_idx]=frame_data.data->descriptors[cam_idx];
                 }
 
+
                 // push to map
-                // may still need to add 3d points in camera coordinates
-                if(sparseMap_.addKeyframe(out_frame)){ //add keyframe returns true if a loop closure was detected
+                if(sparseMap_.addKeyframe(keyframe)){ //add keyframe returns true if a loop closure was detected
                     for (MapLoopClosureDetectedHandler::const_iterator callback_iter = mMapLoopClosureHandler.begin();
                         callback_iter != mMapLoopClosureHandler.end(); ++callback_iter) {
                         const MapLoopClosureDetectedHandler::value_type& pair = *callback_iter;
@@ -279,6 +297,8 @@ namespace ark {
                     }
                 }
             }
+
+            out_frame->keyframe_ = sparseMap_.getKeyframe(out_frame->keyframeId_);
 
 
             //Notify callbacks

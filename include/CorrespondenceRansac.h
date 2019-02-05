@@ -80,10 +80,14 @@ public:
             //Choose random points
             std::vector<Eigen::Vector3d> s_points(num_samples);
             std::vector<Eigen::Vector3d> t_points(num_samples);
-            
+            bool valid =true;
             for( int i = 0; i<num_samples; i++){
 
                 int index(rand()%src->size());
+                if(correspondences[index]<0){
+                    valid =false;
+                    break;
+                }
                 s_points[i] <<  (double)(src->points[index].x),
                                 (double)(src->points[index].y),
                                 (double)(src->points[index].z);
@@ -91,8 +95,8 @@ public:
                                 (double)(tgt->points[correspondences[index]].y),
                                 (double)(tgt->points[correspondences[index]].z);
             }
-
-
+            if(!valid)
+                continue;
 
 
             Eigen::Matrix3d W(Eigen::Matrix3d::Zero()); //point correspondence matrix used to compute R
@@ -134,7 +138,8 @@ public:
             int inliers=0; 
             for (size_t i = 0; i < src->size(); ++i)
             {
-              inliers+=checkThreshold(temp_cloud->points[i],tgt->points[correspondences[i]],inlier_threshold);
+                if(correspondences[i]>=0)
+                    inliers+=checkThreshold(temp_cloud->points[i],tgt->points[correspondences[i]],inlier_threshold);
             }
 
             //save best result
@@ -150,7 +155,8 @@ public:
         num_inliers_out= 0;
         for (size_t i = 0; i < src->size(); ++i)
         {
-            num_inliers_out+=inliers_out[i] = checkThreshold(temp_cloud->points[i],tgt->points[correspondences[i]],inlier_threshold);
+            if(correspondences[i]>=0)
+                num_inliers_out+=inliers_out[i] = checkThreshold(temp_cloud->points[i],tgt->points[correspondences[i]],inlier_threshold);
         }
 
 

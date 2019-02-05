@@ -206,8 +206,11 @@ public:
         problem.SetParameterBlockConstant(poseStart->second.Q_WA.coeffs().data());
 
         ::ceres::Solver::Options options;
-        options.max_num_iterations = 200;
-        options.linear_solver_type = ::ceres::SPARSE_NORMAL_CHOLESKY;
+        options.max_num_iterations = 10;
+        //options.linear_solver_type = ::ceres::SPARSE_NORMAL_CHOLESKY;
+        options.linear_solver_type = ::ceres::SPARSE_SCHUR;
+        options.trust_region_strategy_type = ::ceres::DOGLEG;
+        options.num_threads = 2;
 
         ::ceres::Solver::Summary summary;
         ::ceres::Solve(options, &problem, &summary);

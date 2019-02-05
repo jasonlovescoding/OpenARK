@@ -130,6 +130,71 @@ namespace ark{
         //TODO: add checks for cameraIdx out of bounds
     };//MultiCameraSystem
 
+    /** A paired down MultiCameraFrame, only containing information necessary to be stored by the map */
+    class MapKeyFrame{
+    public:
+        typedef std::shared_ptr<MapKeyFrame> Ptr;
+        /** ID of the frame (may be -1 if not available) */
+        int frameId_;
+        /** Timestamp */
+        double timestamp_;
+        /** Original world position of the Keyframe */
+        Eigen::Matrix4d T_WS_; 
+        /** Optimized world position of the Keyframe */
+        Eigen::Matrix4d T_WS_Optimized_; 
+        /** Bool checking whether the frame has been optimized */
+        bool optimized_;
+        /** Keypoints and Descriptors extracted by the SLAM System 
+         ** A vector of keypoints is kept for each image
+         ** A cv::Mat of all descriptors is kept for each image */
+        std::vector<std::vector<cv::KeyPoint > > keypoints_; 
+        std::vector<cv::Mat> descriptors_;
+        /** Estimated 3D feature positions of all keypoints in each image */
+        std::vector<std::vector<Eigen::Vector4d > > keypoints3dh_C;
+        /** ID of the previous keyframe (may be -1 if not available) */
+        int previousKeyframeId_;
+        /** Pointer to the keyframe (may be nullptr if not available) */
+        MapKeyFrame::Ptr previousKeyframe_;
+
+        MapKeyFrame():
+        frameId_(-1),optimized_(false),previousKeyframeId_(-1){
+
+        }
+
+        const std::vector<cv::KeyPoint>& keypoints(int cameraIdx){
+            return keypoints_[cameraIdx];
+        }
+
+        const cv::Mat& descriptors(int cameraIdx){
+            return descriptors_[cameraIdx];
+        }
+
+        const std::vector<Eigen::Vector4d > & homogeneousKeypoints3d(int cameraIdx){
+            return keypoints3dh_C[cameraIdx];
+        }
+
+        void descriptorsAsVec(int cameraIdx, std::vector<cv::Mat>& out){
+            out.clear();
+            out.reserve(descriptors_[cameraIdx].rows);
+            for(int i=0; i<descriptors_[cameraIdx].rows; i++){
+              out.emplace_back(descriptors_[cameraIdx].row(i));
+            } 
+        }
+
+        void setOptimizedTransform(const Eigen::Matrix4d& T_WS_in){
+            T_WS_Optimized_ = T_WS_in;
+            optimized_ = true;
+        }
+
+        Eigen::Matrix4d T_WS(){
+            if(optimized_){
+                return T_WS_Optimized_;
+            }else
+                return T_WS_;
+        }
+
+    };
+
     /** A set of images taken on the same frame, possibly by multiple instruments/cameras */
     class MultiCameraFrame {
     public:
@@ -159,36 +224,14 @@ namespace ark{
         int keyframeId_;
 
         /** Pointer to keyframe for this frame (may be nullptr if not available) */
-        MultiCameraFrame::Ptr keyframe_;
-
-        /** Flag set if this frame is a keyframe */
-        bool isKeyframe_;
-        //The following memebers are only set if the fame is a keyframe
-
-        /** Original world position of the Keyframe */
-        Eigen::Matrix4d T_WS_; 
-        /** Optimized world position of the Keyframe */
-        Eigen::Matrix4d T_WS_Optimized_; 
-        bool optimized_;
-
-        /** Keypoints and Descriptors extracted by the SLAM System 
-         ** A vector of keypoints is kept for each image
-         ** A cv::Mat of all descriptors is kept for each image */
-        std::vector<std::vector<cv::KeyPoint > > keypoints_; 
-        std::vector<cv::Mat> descriptors_;
-
-        /** ID of the previous keyframe (may be -1 if not available) */
-        int previousKeyframeId_;
-        /** Pointer to the keyframe (may be nullptr if not available) */
-        MultiCameraFrame::Ptr previousKeyframe_;
-
+        MapKeyFrame::Ptr keyframe_;
 
 
 
 
         /** Construct an empty MultiCameraFrame with the given ID (default -1) */
-        explicit MultiCameraFrame(int frame_id = -1):
-        optimized_(false){
+        explicit MultiCameraFrame(int frame_id = -1)
+        {
             frameId_ = frame_id;
         }
 
@@ -197,7 +240,6 @@ namespace ark{
         MultiCameraFrame(std::vector<cv::Mat> images, Eigen::Matrix4d T_KS,
             MultiCameraSystem::Ptr cameraSystem = MultiCameraSystem::Ptr(), 
             int frame_id = -1, int keyframe_id = -1):
-            optimized_(false),
             cameraSystem_(cameraSystem){
             this->images_ = images;
             this->T_KS_ = T_KS;
@@ -210,7 +252,6 @@ namespace ark{
         MultiCameraFrame(cv::Mat image, Eigen::Matrix4d T_KS, 
             MultiCameraSystem::Ptr cameraSystem = MultiCameraSystem::Ptr(), 
             int frame_id = -1, int keyframe_id = -1):
-            optimized_(false),
             cameraSystem_(cameraSystem){
             images_.push_back(image);
             this->T_KS_ = T_KS;
@@ -219,7 +260,7 @@ namespace ark{
         }
 
         /** Copy constructor for MultiCameraFrame */
-        MultiCameraFrame(const MultiCameraFrame & frame) :
+        /*MultiCameraFrame(const MultiCameraFrame & frame) :
             images_(frame.images_.size()), cameraSystem_(frame.cameraSystem_), 
             frameId_(frame.frameId_), keyframeId_(frame.keyframeId_), optimized_(frame.optimized_)
         {   
@@ -241,10 +282,10 @@ namespace ark{
                 previousKeyframeId_ = frame.previousKeyframeId_;
                 previousKeyframe_ = frame.previousKeyframe_;
             }
-        }
+        }*/
 
         /** Move constructor for MultiCameraFrame */
-        MultiCameraFrame(const MultiCameraFrame && frame)
+        /*MultiCameraFrame(const MultiCameraFrame && frame)
         {   
             images_ = std::move(frame.images_);
             T_KS_ = std::move(frame.T_KS_);
@@ -259,10 +300,10 @@ namespace ark{
             descriptors_ = std::move(frame.descriptors_);
             previousKeyframeId_ = std::move(frame.previousKeyframeId_);
             previousKeyframe_ = std::move(frame.previousKeyframe_);
-        }
+        }*/
 
         /** Move assignment for MultiCameraFrame */
-        MultiCameraFrame & operator=(MultiCameraFrame && other)
+        /*MultiCameraFrame & operator=(MultiCameraFrame && other)
         {
             if (this != &other) {
                 images_ = std::move(other.images_);
@@ -280,37 +321,17 @@ namespace ark{
                 previousKeyframe_ = std::move(other.previousKeyframe_);
             }
             return *this;
-        }
+        }*/
 
-        const std::vector<cv::KeyPoint>& keypoints(int cameraIdx){
-            return keypoints_[cameraIdx];
-        }
-
-        const cv::Mat& descriptors(int cameraIdx){
-            return descriptors_[cameraIdx];
-        }
-
-        void descriptorsAsVec(int cameraIdx, std::vector<cv::Mat>& out){
-            out.clear();
-            out.reserve(descriptors_[cameraIdx].rows);
-            for(int i=0; i<descriptors_[cameraIdx].rows; i++){
-              out.emplace_back(descriptors_[cameraIdx].row(i));
-            } 
-        }
         //make threadsafe setting of transform
 
         //make threadsafe
         Eigen::Matrix4d T_WS()
         {
-            if(!isKeyframe_){
-                if(keyframeId_!=-1 && keyframe_.get()!=nullptr)
-                    return keyframe_->T_WS()*T_KS_;
-                else 
-                    return T_KS_;
-            }else if(optimized_){
-                return T_WS_Optimized_;
-            }else
-                return T_WS_;
+            if(keyframeId_!=-1 && keyframe_.get()!=nullptr)
+                return keyframe_->T_WS()*T_KS_;
+            else 
+                return T_KS_;
         }
 
         Eigen::Matrix4d T_WC(int cameraIdx){
@@ -320,10 +341,7 @@ namespace ark{
                 return T_WS();
         }
 
-        void setOptimizedTransform(const Eigen::Matrix4d& T_WS_in){
-            T_WS_Optimized_ = T_WS_in;
-            optimized_ = true;
-        }
-
     };
+
+    
 }
