@@ -52,7 +52,7 @@ int main(int argc, char **argv)
     //std::this_thread::sleep_for( std::chrono::duration<double, std::milli>(500));
     while(!imu0.start());
     //std::this_thread::sleep_for( std::chrono::duration<double, std::milli>(500));
-    camera.enableSync(true);
+    camera.start();
 
     printf("Camera-IMU initialization complete\n");
     fflush(stdout);

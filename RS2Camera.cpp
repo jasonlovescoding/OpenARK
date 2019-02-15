@@ -33,7 +33,7 @@ namespace ark {
 			depthProfile.as<rs2::video_stream_profile>().get_intrinsics();
 		*reinterpret_cast<rs2_extrinsics *>(d2rExtrinsics) = depthProfile.get_extrinsics_to(rgbProfile);
 		*reinterpret_cast<rs2_extrinsics *>(r2dExtrinsics) = rgbProfile.get_extrinsics_to(depthProfile);
-		scale = profile.get_device().first<rs2::depth_sensor>().get_depth_scale();
+		scale = .001f;//profile.get_device().first<rs2::depth_sensor>().get_depth_scale();
 	}
 
 	RS2Camera::~RS2Camera() {
@@ -94,24 +94,24 @@ namespace ark {
       rs2::frameset data;
 
       try {
-          frame.images_.resize(2);
+          frame.images_.resize(3);
 
           data = pipe->wait_for_frames();
 
           if (useRGBStream) {
-              if (frame.images_[1].empty()) frame.images_[0] = cv::Mat(getImageSize(), CV_8UC3);
+              if (frame.images_[0].empty()) frame.images_[0] = cv::Mat(getImageSize(), CV_8UC3);
               rs2::frame color = data.first(RS2_STREAM_COLOR);
               memcpy(frame.images_[0].data, color.get_data(), 3 * width * height);
           }
           else {
-              if (frame.images_[1].empty()) frame.images_[0] = cv::Mat(getImageSize(), CV_8UC1);
+              if (frame.images_[1].empty()) frame.images_[1] = cv::Mat(getImageSize(), CV_8UC1);
               rs2::frame ir = data.first(RS2_STREAM_INFRARED);
               memcpy(frame.images_[1].data, ir.get_data(), width * height);
           }
 
-          if (frame.images_[0].empty()) frame.images_[0] = cv::Mat(getImageSize(), CV_32FC3);
+          if (frame.images_[2].empty()) frame.images_[2] = cv::Mat(getImageSize(), CV_32FC3);
           rs2::frame depth = data.first(RS2_STREAM_DEPTH);
-          project(depth, frame.images_[0]);
+          project(depth, frame.images_[2]);
       } catch (std::runtime_error e) {
           // try reconnecting
           badInputFlag = true;

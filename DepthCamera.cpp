@@ -194,7 +194,7 @@ namespace ark {
 
     const cv::Mat DepthCamera::getXYZMap() const
     {
-        return getFrameImage(0);
+        return getFrameImage(2);
     }
 
     // note: depth camera must have XYZ map

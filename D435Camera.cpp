@@ -14,39 +14,24 @@ namespace ark {
         //TODO: Make read from config file
         rs2::context ctx;
         device = ctx.query_devices().front();
-        //depth_sensor = new rs2::depth_sensor(device.first<rs2::depth_sensor>());
-        //std::cout << "sync?: " << depth_sensor->get_option(RS2_OPTION_INTER_CAM_SYNC_MODE) <<std::endl;
-        //depth_sensor->set_option(RS2_OPTION_INTER_CAM_SYNC_MODE,0);
         width = 640;
         height = 480;
+        //Setup configuration
         config.enable_stream(RS2_STREAM_DEPTH,-1,width, height,RS2_FORMAT_Z16,30);
         config.enable_stream(RS2_STREAM_INFRARED, 1, width, height, RS2_FORMAT_Y8, 30);
         config.enable_stream(RS2_STREAM_INFRARED, 2, width, height, RS2_FORMAT_Y8, 30);
-
-        //std::this_thread::sleep_for( std::chrono::duration<double, std::milli>(30000)); 
-
-        //Start streaming data
-        //pipe = std::make_shared<rs2::pipeline>();
-        //rs2::pipeline_profile selection = pipe->start(config);
-
-        //Disable IR emitter
-        //Enable hardware syncronization
-        //rs2::device selected_device = selection.get_device();
-        //depth_sensor = new rs2::depth_sensor(device.first<rs2::depth_sensor>());
-        //depth_sensor->set_option(RS2_OPTION_EMITTER_ENABLED, 1.f);
-        //depth_sensor->set_option(RS2_OPTION_INTER_CAM_SYNC_MODE,0);
-        //pipe->start(config);
-        //pipe->stop();
-        //delete depth_sensor;
+        //Reset device to ensure sync is off
         device.hardware_reset();
+        //Give camera time to restart, this shouldn't be necessary but it is
         std::this_thread::sleep_for( std::chrono::duration<double, std::milli>(3000));
+        //Wait for the camera to finish restarting
         rs2::device_hub hub(ctx);
         device = hub.wait_for_device();
+        //Need to get the depth sensor specifically as it is the one that controls the sync funciton
         depth_sensor = new rs2::depth_sensor(device.first<rs2::depth_sensor>());
-        std::cout << "sync?: " << depth_sensor->get_option(RS2_OPTION_INTER_CAM_SYNC_MODE) <<std::endl;
-        scale = depth_sensor->get_depth_scale();
-        //std::cout << ctx.query_devices().size() <<std::endl;
-        //
+
+        scale = depth_sensor->get_option(RS2_OPTION_DEPTH_UNITS);
+
     }
 
     D435Camera::~D435Camera() {
@@ -60,65 +45,27 @@ namespace ark {
         catch (...) {}
     }
 
-    void D435Camera::enableSync(bool flag){
-        //pipe->stop();
-        //rs2::context ctx;
-        //rs2::device device = ctx.query_devices()[0];  
-        //std::cout << "sync?: " << depth_sensor->get_option(RS2_OPTION_INTER_CAM_SYNC_MODE) <<std::endl <<std::flush;
+    void D435Camera::start(){
+        //enable sync
         depth_sensor->set_option(RS2_OPTION_INTER_CAM_SYNC_MODE,1);
+        //depth_sensor->set_option(RS2_OPTION_EMITTER_ENABLED, 1.f);
+        //start streaming
         pipe = std::make_shared<rs2::pipeline>();
         rs2::pipeline_profile selection = pipe->start(config);
+        //get the depth intrinsics (needed for projection to 3d)
         auto depthStream = selection.get_stream(RS2_STREAM_DEPTH)
                              .as<rs2::video_stream_profile>();
-        //rs2::device selected_device = selection.get_device();
-        //depth_sensor = new rs2::depth_sensor(selected_device.first<rs2::depth_sensor>());
         depthIntrinsics = depthStream.get_intrinsics();
-        //depth_sensor->set_option(RS2_OPTION_EMITTER_ENABLED, 1.f);
-        //depth_sensor->set_option(RS2_OPTION_INTER_CAM_SYNC_MODE,flag);  
-        //pipe->start(config);
     }
 
     const std::string D435Camera::getModelName() const {
         return "RealSense";
     }
 
-    int D435Camera::getWidth() const {
-        return width;
+    cv::Size D435Camera::getImageSize() const
+    {
+        return cv::Size(width,height);
     }
-
-    int D435Camera::getHeight() const {
-        return height;
-    }
-
-    /*const DetectionParams::Ptr & D435Camera::getDefaultParams() const {
-        if (!defaultParamsSet) {
-            defaultParamsSet = true;
-            defaultParams = std::make_shared<DetectionParams>();
-            defaultParams->contourImageErodeAmount = 0;
-            defaultParams->contourImageDilateAmount = 2;
-            defaultParams->fingerCurveFarMin = 0.18;
-            defaultParams->fingerLenMin = 0.025;
-            defaultParams->handClusterInterval = 15;
-            defaultParams->handClusterMaxDistance = 0.003;
-            defaultParams->handSVMConfidenceThresh = 0.52;
-            defaultParams->handClusterMinPoints = 0.015;
-            defaultParams->planeFloodFillThreshold = 0.19;
-            defaultParams->planeEquationMinInliers = 0.02;
-            defaultParams->planeMinPoints = 0.02;
-            defaultParams->planeCombineThreshold = 0.0019;
-            defaultParams->normalResolution = 3;
-            defaultParams->handRequireEdgeConnected = false;
-        }
-        return defaultParams;
-    }*/
-
-    //bool D435Camera::hasRGBMap() const {
-    //    return useRGBStream;
-    //}
-
-    //bool D435Camera::hasIRMap() const {
-    //    return !useRGBStream;
-    //}
 
     void D435Camera::update(MultiCameraFrame & frame) {
 
@@ -144,7 +91,7 @@ namespace ark {
 
             if (frame.images_[2].empty()) frame.images_[2] = cv::Mat(cv::Size(width,height), CV_32FC3);
             project(depth, frame.images_[2]);
-            frame.images_[2] = frame.images_[2]*.001;
+            frame.images_[2] = frame.images_[2]*scale; //depth is in mm by default
 
 
         } catch (std::runtime_error e) {
@@ -190,43 +137,4 @@ namespace ark {
         }
     }
 
-    /*void D435Camera::query_intrinsics() {
-        rs2_intrinsics * depthIntrinsics = new rs2_intrinsics();
-
-        rs2::context ctx;
-        rs2::device_list list = ctx.query_devices();
-
-        ASSERT(list.size() > 0, "No camera detected.");
-        const rs2::device & dev = list.front();
-        const std::vector<rs2::sensor> sensors = dev.query_sensors();
-
-        for (unsigned i = 0; i < sensors.size(); ++i) {
-            const rs2::sensor & sensor = sensors[i];
-            const std::vector<rs2::stream_profile> & stream_profiles = sensor.get_stream_profiles();
-
-            for (unsigned j = 0; j < stream_profiles.size(); ++j) {
-                const rs2::stream_profile & stream_profile = stream_profiles[j];
-                const rs2_stream & stream_data_type = stream_profile.stream_type();
-                const rs2_format & stream_format = stream_profile.format();
-
-                if (stream_profile.is<rs2::video_stream_profile>()) {
-                    if (stream_data_type == RS2_STREAM_DEPTH && stream_format == RS2_FORMAT_Z16) {
-                        const rs2::video_stream_profile & prof = stream_profile.as<rs2::video_stream_profile>();
-                        *depthIntrinsics = prof.get_intrinsics();
-                        this->depthIntrinsics = depthIntrinsics;
-                        if (depthIntrinsics->height == PREFERRED_FRAME_H) break;
-                    }
-                }
-            }
-            if (this->depthIntrinsics) break;
-        }
-
-        ASSERT(this->depthIntrinsics, "FATAL: Camera has no depth stream!");
-        width = depthIntrinsics->width;
-        height = depthIntrinsics->height;
-
-        config.enable_stream(RS2_STREAM_DEPTH, width, height, RS2_FORMAT_Z16);
-        if (useRGBStream) config.enable_stream(RS2_STREAM_COLOR, width, height, RS2_FORMAT_BGR8);
-        else config.enable_stream(RS2_STREAM_INFRARED, width, height, RS2_FORMAT_Y8);
-    }*/
 }

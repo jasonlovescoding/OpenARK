@@ -5,7 +5,7 @@
 #include <librealsense2/rs.hpp>
 
 // OpenARK Libraries
-#include "DepthCamera.h"
+#include "CameraSetup.h"
 
 namespace ark {
     /**
@@ -13,7 +13,7 @@ namespace ark {
     * Example on how to read from sensor and visualize its output
     * @include SensorIO.cpp
     */
-    class D435Camera 
+    class D435Camera : public CameraSetup
     {
     public:
 
@@ -27,70 +27,33 @@ namespace ark {
         /**
         * Destructor for the RealSense Camera.
         */
-        ~D435Camera();
+        ~D435Camera() override;
 
         /**
          * Get the camera's model name.
          */
-        const std::string getModelName() const;
-
-        /** 
-         * Returns the width of the SR300 camera frame 
-         */
-        int getWidth() const;
-
-        /** 
-         * Returns the height of the SR300 camera frame 
-         */
-        int getHeight() const;
-
-        /** 
-         * Sets the external hardware sync mode for the camera
-         */
-        void enableSync(bool flag);
+        const std::string getModelName() const override;
 
         /**
-         * Returns default detection parameters for this depth camera class
+         * Get image size
          */
-        //const DetectionParams::Ptr & getDefaultParams() const ;
+        cv::Size getImageSize() const;
 
-        /**
-         * Returns true if an RGB image is available from this camera.
-         * @return true if an RGB image is available from this camera.
+        /** 
+         * Sets the external hardware sync ans starts the camera
          */
-        //bool hasRGBMap() const override;
-
-        /**
-         * Returns true if an infrared (IR) image is available from this camera.
-         * @return true if an infrared (IR) image is available from this camera.
-         */
-        //bool hasIRMap() const override;
-
-
-        /** Preferred frame height */
-        const int PREFERRED_FRAME_H = 480;
-
-        /** Shared pointer to SR300 camera instance */
-        typedef std::shared_ptr<D435Camera> Ptr;
+        void start() override;
 
         /**
         * Gets the new frame from the sensor (implements functionality).
         * Updates xyzMap and ir_map.
         */
-        void update(MultiCameraFrame & frame);
+        void update(MultiCameraFrame & frame) override;
 
     protected:
 
-        /**
-         * Initialize the camera, opening channels and resetting to initial configurations
-         */
-        void initCamera();
-
         /** Converts an D435 raw depth image to an ordered point cloud based on the current camera's intrinsics */
         void project(const rs2::frame & depth_frame, cv::Mat & xyz_map);
-
-        /** Query RealSense camera intrinsics */
-        //void query_intrinsics();
 
         std::shared_ptr<rs2::pipeline> pipe;
         rs2::config config;

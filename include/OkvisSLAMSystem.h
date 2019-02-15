@@ -33,25 +33,6 @@ namespace ark {
             }
         };
 
-        /*struct StampedPath {
-            std::vector<okvis::kinematics::Transformation> path;
-            okvis::Time timestamp;
-            bool loopClosureDetected;
-            bool operator<(const StampedPath& right) const
-            {
-                return timestamp > right.timestamp;
-            }
-        };
-
-        struct StampedState {
-            okvis::kinematics::Transformation T_WS;
-            okvis::Time timestamp;
-            bool operator<(const StampedState& right) const
-            {
-                return timestamp > right.timestamp;
-            }
-        };*/
-
     public:
         EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
@@ -94,17 +75,12 @@ namespace ark {
         okvis::Time t_imu_;
         okvis::Duration deltaT_;
         okvis::VioParameters parameters_;
-        //SingleConsumerPriorityQueue<StampedImages> image_queue_;
         SingleConsumerPriorityQueue<StampedImages> frame_queue_;
         SingleConsumerPriorityQueue<StampedFrameData> frame_data_queue_;
-        //SingleConsumerPriorityQueue<StampedPath> path_queue_;
-        //SingleConsumerPriorityQueue<StampedState> state_queue_;
-        //std::thread keyFrameConsumerThread_;
         std::thread frameConsumerThread_;
         int num_frames_;
         std::atomic<bool> kill;
         SparseMap<DBoW2::FBRISK::TDescriptor, DBoW2::FBRISK> sparseMap_;
-        MultiCameraSystem::Ptr cameraSystem_; 
 
     }; // OkvisSLAMSystem
 

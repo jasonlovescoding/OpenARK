@@ -12,6 +12,8 @@
     #include "RS2Camera.h"
 #endif
 
+#include "D435Camera.h"
+
 #include "Core.h"
 #include "Visualizer.h"
 #include "StreamingAverager.h"
@@ -28,21 +30,27 @@ int main() {
     // seed the rng
     srand(time(NULL));
 
+/*
     // initialize the camera
     DepthCamera::Ptr camera;
 
 #if defined(RSSDK2_ENABLED)
+    std::cout << "RS2Camera Selected" <<std::endl;
     camera = std::make_shared<RS2Camera>();
 #elif defined(RSSDK_ENABLED)
     ASSERT(strcmp(OPENARK_CAMERA_TYPE, "sr300") == 0, "Unsupported RealSense camera type.");
+    std::cout << "SR300Camera Selected" <<std::endl;
     camera = std::make_shared<SR300Camera>();
 #elif defined(PMDSDK_ENABLED)
+    std::cout << "PMDCamera Selected" <<std::endl;
     camera = std::make_shared<PMDCamera>();
 #endif
 
     // initialize parameters
     DetectionParams::Ptr params = camera->getDefaultParams(); // default parameters for camera
-
+*/
+    DetectionParams::Ptr params(new DetectionParams());
+    D435Camera cam;
     // initialize detectors
     PlaneDetector::Ptr planeDetector = std::make_shared<PlaneDetector>();
     HandDetector::Ptr handDetector = std::make_shared<HandDetector>(planeDetector);
@@ -64,7 +72,8 @@ int main() {
     bool showHands = true, showPlanes = false, useSVM = true, useEdgeConn = false, showArea = false, playing = true;
 
     // turn on the camera
-    camera->beginCapture();
+    //camera->beginCapture();
+    cam.start();
 
     // main demo loop
     while (true)
@@ -72,7 +81,10 @@ int main() {
         ++currFrame;
 
         // get latest image from the camera
-        cv::Mat xyzMap = camera->getXYZMap();
+        //cv::Mat xyzMap = camera->getFrameImage(2,CV_32FC3);
+        MultiCameraFrame frame;
+        cam.update(frame);
+        cv::Mat xyzMap = frame.images_[2];
 
         /**** Start: Hand/plane detection ****/
 
@@ -89,11 +101,11 @@ int main() {
         if (showPlanes || showHands) {
             /* even if only hand layer is enabled, 
                planes need to be detected anyway for finding hand contact points */
-            planeDetector->update(*camera);
+            planeDetector->update(xyzMap);
             planes = planeDetector->getPlanes();
 
             if (showHands) {
-                handDetector->update(*camera);
+                handDetector->update(xyzMap);
                 hands = handDetector->getHands();
             }
         }
@@ -107,13 +119,13 @@ int main() {
 
         // background of visualization
         if (backgroundStyle == 1) {
-            if (camera->hasIRMap()) {
+            //if (camera->hasIRMap()) {
                 // IR background
-                cv::cvtColor(camera->getIRMap(), handVisual, cv::COLOR_GRAY2BGR, 3);
-            }
-            else if (camera->hasRGBMap()) {
-                handVisual = camera->getRGBMap().clone();
-            }
+                cv::cvtColor(frame.images_[0], handVisual, cv::COLOR_GRAY2BGR, 3);
+           // }
+            //else if (camera->hasRGBMap()) {
+            ///    handVisual = camera->getRGBMap().clone();
+            //}
         }
 
         else if (backgroundStyle == 2) {
@@ -128,12 +140,12 @@ int main() {
                 Visualizer::visualizeNormalMap(normalMap, handVisual, params->normalResolution);
             }
             else {
-                handVisual = cv::Mat::zeros(camera->getImageSize(), CV_8UC3);
+                handVisual = cv::Mat::zeros(cam.getImageSize(), CV_8UC3);
             }
         }
 
         else {
-            handVisual = cv::Mat::zeros(camera->getImageSize(), CV_8UC3);
+            handVisual = cv::Mat::zeros(cam.getImageSize(), CV_8UC3);
         }
 
         const cv::Scalar WHITE(255, 255, 255);
@@ -221,7 +233,7 @@ int main() {
             currCycleStartTime = now;
         }
 
-        if (currFrame > FPS_CYCLE_FRAMES && !camera->badInput()) {
+        if (currFrame > FPS_CYCLE_FRAMES){// && !camera->badInput()) {
             // show FPS on top right
             std::stringstream fpsDisplay;
             static char chr[32];
@@ -236,7 +248,7 @@ int main() {
         int wait = 1;
 
         // show "NO SIGNAL" on each visual in case of bad input
-        if (camera->badInput() || !playing) {
+        if (!playing){ //(camera->badInput() || !playing) {
             // wait 50 ms, or pause
             wait = !playing ? 0 : 50;
 
@@ -260,7 +272,7 @@ int main() {
 
         // show visualizations
         if (!xyzMap.empty()) {
-            cv::imshow(camera->getModelName() + " Depth Map", xyzMap);
+            cv::imshow(cam.getModelName() + " Depth Map", xyzMap);
             cv::imshow("Demo Output - OpenARK v" + std::string(VERSION), handVisual);
         }
         /**** End: Visualization ****/
@@ -301,7 +313,7 @@ int main() {
         /**** End: Controls ****/
     }
 
-    camera->endCapture();
+    //camera->endCapture();
 
     cv::destroyAllWindows();
     return 0;
