@@ -11,6 +11,7 @@
 #include <DLoopDetector.h>
 #include <Eigen/Geometry>
 #include "ceres/ceres.h"
+#include <atomic>
 
 namespace ark{
 

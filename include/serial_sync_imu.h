@@ -6,10 +6,14 @@
 #include <string.h>
 #include <fcntl.h>
 #include <errno.h>
-#include <termios.h>
-#include <unistd.h>
 #include <thread>
 #include <Eigen/Core>
+#ifdef _WIN32
+    #include <windows.h>
+#else
+    #include <termios.h>
+    #include <unistd.h>
+#endif
 #include "concurrency.h"
 
 #define BUFF_SIZE 100
@@ -48,14 +52,31 @@ namespace ark {
         SerialSyncImu(char* port_addr, const ImuParams* params):
         params_(params){
             running_ = false;
-            port_=open(port_addr, O_RDWR | O_NOCTTY | O_NDELAY);
-            fcntl(port_, F_SETFL,0);
+            #ifdef _WIN32
+                port_=CreateFile("COM3", GENERIC_READ | GENERIC_WRITE, 0, 0, OPEN_EXISTING, 0, 0);
+                DCB dcbSerialParams = { 0 }; // Initializing DCB structure
+                dcbSerialParams.DCBlength = sizeof(dcbSerialParams);
+                if(!GetCommState(port_, &dcbSerialParams))
+                    std::cout << "ERROR GETTING COM PORT" << std::endl;
+                dcbSerialParams.BaudRate = CBR_115200;  // Setting BaudRate = 9600
+                dcbSerialParams.ByteSize = 8;         // Setting ByteSize = 8
+                dcbSerialParams.StopBits = ONESTOPBIT;// Setting StopBits = 1
+                dcbSerialParams.Parity   = NOPARITY;  // Setting Parity = None
+                SetCommState(port_, &dcbSerialParams);
+            #else
+                port_=open(port_addr, O_RDWR | O_NOCTTY | O_NDELAY);
+                fcntl(port_, F_SETFL,0);
+            #endif
         }
 
         bool start(){
             char buf[1];
             buf[0]='*';
-            write(port_,buf,1);
+            #ifdef _WIN32
+                WriteFile(port_,buf,1,0,0);
+            #else
+                write(port_,buf,1);
+            #endif
             if(running_==false){
                 running_=true;
                 run_thread_ = std::thread(&SerialSyncImu::run,this);
@@ -86,6 +107,7 @@ namespace ark {
 
         bool getImuToTime(double timestamp, std::vector<ImuPair>& data_out){
             ImuDataRaw imu_data;
+            imu_data.timestamp=0;
             while((imu_data.timestamp+1000.0/params_->rate)*1e6<timestamp){
                 //convert ImuDataRaw to ImuPair
                 if(imu_queue_.try_dequeue(&imu_data)){
@@ -101,8 +123,12 @@ namespace ark {
 
         double getFrameTimestamp(long frame_num){
             ImgTimeInfo img_time;
-            while(img_time.id!=frame_num){
-                img_queue_.try_dequeue(&img_time);
+            img_time.id=0;
+            while(img_time.id<frame_num){
+                if(img_queue_.try_get_front(&img_time))
+                    if(img_time.id>frame_num)
+                        return -1;
+                img_queue_.dequeue();
             }
             return double(img_time.timestamp*1e6); //convert to nanoseconds
         };
@@ -180,25 +206,41 @@ namespace ark {
 
         void run(){
             char buff[BUFF_SIZE], buff_rem[BUFF_SIZE], buff_total[BUFF_SIZE*2];
-            int bytes;
+            #ifdef _WIN32
+                DWORD bytes;
+            #else
+                int bytes;
+            #endif
             while(running_){
-                bytes=read(port_,buff,BUFF_SIZE);
+                #ifdef _WIN32
+                    ReadFile(port_,buff,BUFF_SIZE,&bytes,0);
+                #else
+                    bytes=read(port_,buff,BUFF_SIZE);
+                #endif
                 int bytes_rem;
                 parse_buf(buff,bytes,buff_rem,bytes_rem);
                 while(bytes<BUFF_SIZE){
-                    bytes=read(port_,buff,BUFF_SIZE); 
+                    #ifdef _WIN32
+                        ReadFile(port_,buff,BUFF_SIZE,&bytes,0);
+                    #else
+                        bytes=read(port_,buff,BUFF_SIZE);
+                    #endif
                     memcpy(buff_total,buff_rem,bytes_rem);
                     memcpy(buff_total+bytes_rem,buff,bytes);
                     parse_buf(buff_total,bytes+bytes_rem,buff_rem,bytes_rem);
                 }
             }
 
-            close(port_);
+            //close(port_);
+            CloseHandle(port_);
 
         }
 
-
-        int port_;
+        #ifdef _WIN32
+            HANDLE port_;
+        #else
+            int port_;
+        #endif
         volatile bool running_;
         single_consumer_queue<ImuDataRaw> imu_queue_;
         single_consumer_queue<ImgTimeInfo> img_queue_;

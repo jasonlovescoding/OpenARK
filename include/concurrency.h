@@ -49,6 +49,16 @@ public:
         return false;
     }
 
+    bool try_get_front(T* item)
+    {
+
+        std::unique_lock<std::mutex> lock(mutex);
+        if(q.size()>0)
+            *item = q.front();
+            return true;
+        return false;
+    }
+
     void clear()
     {
         std::unique_lock<std::mutex> lock(mutex);

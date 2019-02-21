@@ -29,7 +29,7 @@ option( BUILD_SLAM_DEMO "BUILD_SLAM_DEMO" ON)
 option( BUILD_DATA_RECORDING "BUILD_DATA_RECORDING" OFF)
 option( BUILD_TESTS "BUILD_TESTS" OFF )
 option( BUILD_UNITY_PLUGIN "BUILD_UNITY_PLUGIN" ON )
-option( USE_RSSDK2 "USE_RSSDK2" ON )
+option( USE_realsense2 "USE_realsense2" ON )
 option( USE_RSSDK "USE_RSSDK" OFF )
 option( USE_PMDSDK "USE_PMDSDK" OFF )
 
@@ -67,6 +67,7 @@ if(BUILD_SLAM_DEMO)
 
   # require glog (should come with Okvis)
   find_package( Glog REQUIRED )
+  include_directories(${GLOG_INCLUDE_DIRS})
   message(STATUS "Found Glog: ${GLOG_LIBRARIES}")
 
   # require OpenGV (should come with Okvis)
@@ -107,7 +108,7 @@ if(BUILD_SLAM_DEMO)
   endif()
 
   set(
-    SLAM_DEPENDENCIES
+    DEPENDENCIES
     ${Dlib_LIBRARIES}
     ${DBoW2_LIBRARIES}
     ${BRISK_LIBRARIES}
@@ -117,59 +118,33 @@ if(BUILD_SLAM_DEMO)
     ${OKVIS_LIBRARIES}
     ${CERES_LIBRARIES}
   )
-  if(WIN32)
-    add_subdirectory(src/third_party/glfw)
-    list(APPEND SLAM_DEPENDENCIES glfw3)
-  else()
-      # Find glfw header
-      find_path(GLFW_INCLUDE_DIR NAMES GLFW/glfw3.h
-          PATHS /usr/X11R6/include
-                /usr/include/X11
-                /opt/graphics/OpenGL/include
-                /opt/graphics/OpenGL/contrib/libglfw
-                /usr/local/include
-                /usr/include/GL
-                /usr/include
-      )
-      # Find glfw library
-      find_library(GLFW_LIBRARIES NAMES glfw glfw3
-              PATHS /usr/lib64
-                    /usr/lib
-                    /usr/lib/${CMAKE_LIBRARY_ARCHITECTURE}
-                    /usr/local/lib64
-                    /usr/local/lib
-                    /usr/local/lib/${CMAKE_LIBRARY_ARCHITECTURE}
-                    /usr/X11R6/lib
-      )
-      list(APPEND SLAM_DEPENDENCIES m ${GLFW_LIBRARIES} ${LIBUSB1_LIBRARIES})
-      include_directories(${GLFW_INCLUDE_DIR})
-  endif() 
+  
 endif(BUILD_SLAM_DEMO)
 
 
-set( RSSDK2_FOUND OFF )
-if( USE_RSSDK2 )
-  find_package( RSSDK2 )
-  if( RSSDK2_FOUND )
-       message( STATUS "Found RSSDK2: ${RSSDK2_INCLUDE_DIR}" )
-  endif( RSSDK2_FOUND )
-endif( USE_RSSDK2 )
+set( realsense2_FOUND OFF )
+if( USE_realsense2 )
+  find_package( realsense2 )
+  if( realsense2_FOUND )
+       message( STATUS "Found realsense2: ${realsense2_INCLUDE_DIR}" )
+  endif( realsense2_FOUND )
+endif( USE_realsense2 )
 
 set( RSSDK_FOUND OFF )
-if( USE_RSSDK OR NOT RSSDK2_FOUND )
+if( USE_RSSDK OR NOT realsense2_FOUND )
   find_package( RSSDK )
   if( RSSDK_FOUND )
        message( STATUS "Found RSSDK: ${RSSDK_INCLUDE_DIR}" )
   endif( RSSDK_FOUND )
-endif( USE_RSSDK OR NOT RSSDK2_FOUND )
+endif( USE_RSSDK OR NOT realsense2_FOUND )
 
 set( PMDSDK_FOUND OFF )
-if( USE_PMDSDK OR ( NOT RSSDK_FOUND AND NOT RSSDK2_FOUND ) )
+if( USE_PMDSDK OR ( NOT RSSDK_FOUND AND NOT realsense2_FOUND ) )
   find_package( PMDSDK REQUIRED )
   if( PMDSDK_FOUND )
      message( STATUS "Found PMDSDK: ${PMDSDK_INCLUDE_DIR}" )
   endif( PMDSDK_FOUND )
-endif( USE_PMDSDK OR ( NOT RSSDK_FOUND AND NOT RSSDK2_FOUND ) )
+endif( USE_PMDSDK OR ( NOT RSSDK_FOUND AND NOT realsense2_FOUND ) )
 
 include_directories(
   ${OpenCV_INCLUDE_DIRS}
@@ -178,6 +153,7 @@ include_directories(
 
 set(
   DEPENDENCIES
+  ${DEPENDENCIES}
   ${OpenCV_LIBRARIES}
   ${PCL_LIBRARIES}
 )
@@ -206,6 +182,7 @@ set(
   MockCamera.cpp
   glfwManager.cpp
   OkvisSLAMSystem.cpp
+  D435iCamera.cpp
 )
 
 set(
@@ -231,19 +208,49 @@ set(
   ${INCLUDE_DIR}/glfwManager.h
   ${INCLUDE_DIR}/serial_sync_imu.h
   ${INCLUDE_DIR}/concurrency.h
+  ${INCLUDE_DIR}/D435iCamera.h
+  ${INCLUDE_DIR}/CameraSetup.h
   stdafx.h
 )
 
-if( NOT RSSDK2_FOUND )
-  set( _RSSDK2_ "//" )
+if(WIN32)
+    add_subdirectory(third_party/glfw)
+    list(APPEND DEPENDENCIES glfw3)
+  else()
+      # Find glfw header
+      find_path(GLFW_INCLUDE_DIR NAMES GLFW/glfw3.h
+          PATHS /usr/X11R6/include
+                /usr/include/X11
+                /opt/graphics/OpenGL/include
+                /opt/graphics/OpenGL/contrib/libglfw
+                /usr/local/include
+                /usr/include/GL
+                /usr/include
+      )
+      # Find glfw library
+      find_library(GLFW_LIBRARIES NAMES glfw glfw3
+              PATHS /usr/lib64
+                    /usr/lib
+                    /usr/lib/${CMAKE_LIBRARY_ARCHITECTURE}
+                    /usr/local/lib64
+                    /usr/local/lib
+                    /usr/local/lib/${CMAKE_LIBRARY_ARCHITECTURE}
+                    /usr/X11R6/lib
+      )
+      list(APPEND DEPENDENCIES m ${GLFW_LIBRARIES} ${LIBUSB1_LIBRARIES})
+      include_directories(${GLFW_INCLUDE_DIR})
+  endif() 
+
+if( NOT realsense2_FOUND )
+  set( _realsense2_ "//" )
 else()
-  include_directories( ${RSSDK2_INCLUDE_DIR} )
+  include_directories( ${realsense2_INCLUDE_DIR} )
   set( SOURCES ${SOURCES} RS2Camera.cpp )
   set( SOURCES ${SOURCES} D435Camera.cpp )
   set( HEADERS ${HEADERS} ${INCLUDE_DIR}/RS2Camera.h )
   set( HEADERS ${HEADERS} ${INCLUDE_DIR}/D435Camera.h )
-  set( DEPENDENCIES ${DEPENDENCIES} ${RSSDK2_LIBRARY} )
-endif( NOT RSSDK2_FOUND )
+  set( DEPENDENCIES ${DEPENDENCIES} ${realsense2_LIBRARY} )
+endif( NOT realsense2_FOUND )
 
 if( NOT RSSDK_FOUND )
   set( _RSSDK_ "//" )
@@ -319,7 +326,7 @@ if( ${BUILD_AVATAR_DEMO} )
 endif( ${BUILD_AVATAR_DEMO} )
 
 if( ${BUILD_SLAM_DEMO} )
-    add_executable( ${SLAM_DEMO_NAME} SlamDemo.cpp )
+    add_executable( ${SLAM_DEMO_NAME} SlamDemo435i.cpp )
     target_include_directories( ${SLAM_DEMO_NAME} PRIVATE ${INCLUDE_DIR} )
     target_link_libraries( ${SLAM_DEMO_NAME} ${SLAM_DEPENDENCIES} ${DEPENDENCIES} ${LIB_NAME} )
     #set_target_properties( ${SLAM_DEMO_NAME} PROPERTIES OUTPUT_NAME ${LIB_NAME} )

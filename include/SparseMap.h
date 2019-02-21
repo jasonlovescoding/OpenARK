@@ -165,7 +165,7 @@ class SparseMap {
       std::cout << transformEstimate.matrix() << std::endl;
       //TODO: Try refining pose estimate in image space, image space is really the proper way to do this
       //TODO: Reduced pose graph and ISAM methods will allow a longer runtime
-      graph_.AddConstraint(kf->frameId_,loop_kf->frameId_,transformEstimate.matrix());
+      graph_.AddConstraint(kf->frameId_,loop_kf->frameId_,transformEstimate.inverse().matrix());
       graph_.optimize();
       for(std::map<int, MapKeyFrame::Ptr>::iterator frame=frameMap_.begin();
         frame!=frameMap_.end(); frame++){

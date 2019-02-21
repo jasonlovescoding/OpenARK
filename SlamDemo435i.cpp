@@ -1,4 +1,4 @@
-#include "D435Camera.h"
+#include "D435iCamera.h"
 #include "serial_sync_imu.h"
 #include "OkvisSLAMSystem.h"
 #include <iostream>
@@ -44,13 +44,13 @@ int main(int argc, char **argv)
     params.rate = 200;
     params.gyro_div =  16.4 *180.0/M_PI;
     params.accel_div = 8192.0/9.81;
-    SerialSyncImu imu0("COM4", &params);
+    //SerialSyncImu imu0("COM4", &params);
     printf("Camera initialization started...\n");
     fflush(stdout);
-    D435Camera camera;
-    //printf("IMU initialization started...\n");
+    D435iCamera camera;
+    printf("IMU initialization started...\n");
     //std::this_thread::sleep_for( std::chrono::duration<double, std::milli>(500));
-    while(!imu0.start());
+    //while(!imu0.start());
     //std::this_thread::sleep_for( std::chrono::duration<double, std::milli>(500));
     camera.start();
 
@@ -102,14 +102,16 @@ int main(int argc, char **argv)
 
         //Get timestamp of camera
         //printf("getTs: %i\n",frame.frameId_);
-        frame.timestamp_ = imu0.getFrameTimestamp(frame.frameId_);//
+        //frame.timestamp_ = imu0.getFrameTimestamp(frame.frameId_);//
         //printf("frame ts: %f\n",frame.timestamp_/1e9);
-        if(frame.timestamp_<0)
-            continue;
+        //if(frame.timestamp_<0)
+        //    continue;
 
         //Get or wait for IMU Data until current frame 
+        //std::cout << "frame: " << frame.timestamp_ << std::endl;
         std::vector<ImuPair> imuData;
-        imu0.getImuToTime(frame.timestamp_,imuData);
+        camera.getImuToTime(frame.timestamp_,imuData);
+        //std::cout << "numimu: " << imuData.size() << std::endl;
 
         //Add data to SLAM system
         slam.PushIMU(imuData);

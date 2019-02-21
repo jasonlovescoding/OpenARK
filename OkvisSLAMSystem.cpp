@@ -21,7 +21,7 @@ namespace ark {
 
         //initialize Visual odometry
         okvis_estimator_ = std::make_shared<okvis::ThreadedKFVio>(parameters_);
-        okvis_estimator_->setBlocking(false);
+        okvis_estimator_->setBlocking(true);
 
         //Okvis's outframe is our inframe
         auto frame_callback = [this](const okvis::Time& timestamp, okvis::OutFrameData::Ptr frame_data) {
@@ -161,9 +161,10 @@ namespace ark {
             }
             num_frames_++;
             for (size_t i = 0; i < images.size(); i++) {
-                if (i < parameters_.nCameraSystem.numCameras())
+                if (i < parameters_.nCameraSystem.numCameras()){
                     //printf("add image: %i\n", i);
                     okvis_estimator_->addImage(t_image, i, images[i]);
+                }
             }
         }
     }
