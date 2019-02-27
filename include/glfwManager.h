@@ -78,6 +78,56 @@ public:
 
 };//Window
 
+class ARCameraWindow : public ObjectWindow{
+public:
+	ARCameraWindow(std::string name, int resX, int resY, GLenum image_format, GLenum data_type, double px, double py, double cx, double cy, double near_cut, double far_cut):
+	ObjectWindow(name,resX,resY),
+	image_format_(image_format),
+	data_type_(data_type),
+	cube_num(0){
+		proj_mat_=Eigen::Matrix4d::Zero();
+		/*proj_mat_(0,0)=px/cx;
+		proj_mat_(1,1)=py/cy;
+		proj_mat_(2,2)=(near_cut+far_cut)/(near_cut-far_cut);
+		proj_mat_(2,3)=2*far_cut*near_cut/(near_cut-far_cut);
+		proj_mat_(3,2)=-1;*/
+		proj_mat_(0,0)=2*px/resX;
+		proj_mat_(1,1)=2*py/resY;
+		proj_mat_(2,0)=2*cx/resX-1.0;
+		proj_mat_(2,1)=2*cy/resY-1.0;
+		proj_mat_(2,2)=(near_cut+far_cut)/(near_cut-far_cut);
+		proj_mat_(2,3)=2*far_cut*near_cut/(near_cut-far_cut);
+		proj_mat_(3,2)=-1;
+
+		glfwSetInputMode(win_ptr, GLFW_STICKY_MOUSE_BUTTONS, 1);
+	}
+
+	bool display() override;
+
+	void set_camera(const Eigen::Affine3d& cam_extr){
+		cam_extr_=cam_extr;
+	}
+
+
+	void set_image(cv::Mat image_in);
+
+	void keyboard_control() override;
+
+
+private:
+	Eigen::Affine3d cam_extr_;
+	Eigen::Matrix4d proj_mat_;
+	cv::Mat current_image;
+	GLuint texture;
+	GLenum image_format_;
+	GLenum data_type_;
+	int cube_num;
+
+
+
+
+};
+
 
 class CameraWindow : public ObjectWindow{
 

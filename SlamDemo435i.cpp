@@ -10,8 +10,9 @@ using namespace ark;
 int main(int argc, char **argv)
 {
 
-    if (argc != 4 && argc != 3 && argc !=2 ) {
-        std::cerr << "Usage: ./" << argv[0] << " configuration-yaml-file [vocabulary-file] [skip-first-seconds]";
+    if (argc >4 ) {
+        std::cerr << "Usage: ./" << argv[0] << " configuration-yaml-file [vocabulary-file] [skip-first-seconds]" << std::endl
+        <<"Args given: " << argc << std::endl;
         return -1;
     }
 
@@ -25,11 +26,11 @@ int main(int argc, char **argv)
     // read configuration file
     std::string configFilename;
     if (argc > 1) configFilename = argv[1];
-    else configFilename = "intr.yml";
+    else configFilename = "intr.yaml";
 
     std::string vocabFilename;
     if (argc > 2) vocabFilename = argv[2];
-    else vocabFilename = "";
+    else vocabFilename = "brisk_k10_l6_t40_n75_65k_scale_2oct.yml.bn";
 
     OkvisSLAMSystem slam(vocabFilename, configFilename);
 
@@ -59,23 +60,26 @@ int main(int argc, char **argv)
 
     //Window for displaying the path
     //PoseViewer poseViewer;
-    MyGUI::CameraWindow path_win("Path Viewer", 1024, 620);
-    MyGUI::ImageWindow img_win("Frame Viewer", 640,480, GL_LUMINANCE, GL_UNSIGNED_BYTE);
+    MyGUI::CameraWindow traj_win("Traj Viewer", 640,480);
+    MyGUI::ARCameraWindow ar_win("AR Viewer", 640,480, GL_LUMINANCE, GL_UNSIGNED_BYTE, 3.84299896e+02, 3.84299896e+02, 3.22548157e+02, 2.36944305e+02,0.01,100);
     MyGUI::Path path1("path1", Eigen::Vector3d(1, 0, 0));
-    MyGUI::Axis axis1("axis1", 1);
+    MyGUI::Axis axis1("axis1", .1);
     MyGUI::Axis axis2("axis2", 1);
     MyGUI::Grid grid1("grid1", 10, 1);
-    path_win.add_object(&path1);
-    path_win.add_object(&axis1);
-    path_win.add_object(&axis2);
-    path_win.add_object(&grid1);
+    traj_win.add_object(&path1);
+    traj_win.add_object(&axis1);
+    traj_win.add_object(&axis2);
+    traj_win.add_object(&grid1);
+    ar_win.add_object(&axis1);
+
 
     //Recieves output from SLAM system and displays to the screen
-    FrameAvailableHandler handler([&path1, &axis2, &img_win](MultiCameraFrame::Ptr frame) {
+    FrameAvailableHandler handler([&path1, &axis2, &ar_win](MultiCameraFrame::Ptr frame) {
         Eigen::Affine3d transform(frame->T_WS());
         path1.add_node(transform.translation());
         axis2.set_transform(transform);
-        img_win.set_image(frame->images_[0]);
+        ar_win.set_camera(transform);
+        ar_win.set_image(frame->images_[0]);
     });
     slam.AddFrameAvailableHandler(handler, "mapping");
 
@@ -119,6 +123,8 @@ int main(int argc, char **argv)
 
         int k = cv::waitKey(1);
         if (k == 'q' || k == 'Q' || k == 27) break; // 27 is ESC
+        //if (k == 'p')
+
     }
     printf("\nTerminate...\n");
     // Clean up

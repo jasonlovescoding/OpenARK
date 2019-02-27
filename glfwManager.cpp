@@ -203,6 +203,128 @@ void ObjectWindow::add_object(Object* obj){
 }
 	
 
+bool ARCameraWindow::display(){
+    if(win_ptr==NULL)
+        return false;
+    if(!glfwWindowShouldClose(win_ptr)){
+        if(current_image.ptr()==NULL || current_image.rows==0 || current_image.cols==0)
+            return true;
+        glfwMakeContextCurrent(win_ptr);
+        GLint windowWidth, windowHeight;
+        glfwGetFramebufferSize(win_ptr, &windowWidth, &windowHeight);
+        glViewport(0, 0, windowWidth, windowHeight);
+
+        glClearColor(0.0, 0.3, 0.8, 1.0);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+        glDisable(GL_LIGHTING);
+        glDepthMask(GL_FALSE); 
+
+        glMatrixMode(GL_PROJECTION);
+        glLoadIdentity();
+        glOrtho(0, windowWidth, windowHeight, 0, -1, +1);
+        glMatrixMode(GL_MODELVIEW);
+        glLoadIdentity();
+
+        glBindTexture(GL_TEXTURE_2D, texture);
+        glPixelStorei(GL_UNPACK_ALIGNMENT, (current_image.step & 3) ? 1 : 4);
+        int height = current_image.rows;
+        int width = current_image.cols;
+        int elem_size = current_image.elemSize();
+        int stride = current_image.step/elem_size;
+        glPixelStorei(GL_UNPACK_ROW_LENGTH,stride);
+
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, stride, height, 0, image_format_, data_type_, current_image.ptr());
+
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
+        glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+        //glBindTexture(GL_TEXTURE_2D, 0);
+
+
+        glColor3f(1.0f, 1.0f, 1.0f);
+        glBindTexture(GL_TEXTURE_2D, texture);
+        glEnable(GL_TEXTURE_2D);
+        glBegin(GL_QUADS);
+        glTexCoord2f(0, 0); glVertex2f(0,    0   );
+        glTexCoord2f(1, 0); glVertex2f(0+width, 0   );
+        glTexCoord2f(1, 1); glVertex2f(0+width, 0+height);
+        glTexCoord2f(0, 1); glVertex2f(0,    0+height);
+        glEnd();
+        glDisable(GL_TEXTURE_2D);
+        //glBindTexture(GL_TEXTURE_2D, 0);  
+        glDepthMask(GL_TRUE); 
+        glDepthFunc(GL_LEQUAL);
+
+        
+        // Draw stuff
+
+        glMatrixMode(GL_PROJECTION);
+        glLoadIdentity();
+
+        //gluPerspective( 90, (double)windowHeight / (double)windowWidth, .01, 100 );
+        glLoadMatrixd(proj_mat_.data());
+
+        glMatrixMode(GL_MODELVIEW);
+        glLoadIdentity();
+
+        //Eigen::Affine3d prerot(Eigen::AngleAxis<double>(3.14159,Eigen::Vector3d(0,0,1)));
+        //glLoadMatrixd(cam_extr_.inverse().data());
+        Eigen::AngleAxis<double> R(cam_extr_.inverse().rotation());
+        Eigen::Translation3d T(cam_extr_.inverse().translation());
+
+
+        glRotated(180,0,1,0);       
+        glRotated(180,0,0,1);       
+        glTranslated(T.x(),T.y(),T.z());
+        glRotated(R.angle()*180/3.14159,R.axis().x(),R.axis().y(),R.axis().z());
+
+
+
+        for(const auto obj : objects){
+            obj.second->display();
+        }
+ 
+        glFlush();
+
+
+        // Update Screen
+        glfwSwapBuffers(win_ptr);
+        return true;
+
+    }else{
+        Manager::windows.erase(name_);
+        for(const auto& obj : objects){
+            obj.second->windows.erase(name_);
+        }
+        glfwDestroyWindow(win_ptr);
+        win_ptr=NULL;
+        return false;
+    }
+
+
+}
+
+void ARCameraWindow::set_image(cv::Mat image_in){
+    if(win_ptr!=NULL)
+        current_image = image_in;
+}
+
+void ARCameraWindow::keyboard_control()
+{
+  if(glfwGetKey(win_ptr, GLFW_KEY_ESCAPE) == GLFW_PRESS)
+    glfwSetWindowShouldClose(win_ptr, GL_TRUE);
+  if(glfwGetMouseButton(win_ptr, GLFW_MOUSE_BUTTON_LEFT)==GLFW_PRESS){
+    std::string cube_name = std::string("CubeNum")+std::to_string(cube_num);
+    Object* obj = new Cube(cube_name, 0.1,0.1,0.1);
+    cube_num++;
+    obj->set_transform(cam_extr_);
+    std::cout << "Adding cube " << cube_name << std::endl;
+    add_object(obj); //NOTE: this is bad, should change objects to shared_ptr
+  }
+}
 
 
 Object::Object(std::string name):
@@ -347,9 +469,9 @@ void Grid::draw_obj()
 
 void Axis::draw_obj()
 {
-    glDepthFunc(GL_ALWAYS);   
+    //glDepthFunc(GL_ALWAYS);   
     glDisable(GL_LIGHTING);
-    glPushMatrix();             
+    //glPushMatrix();             
 
     // draw axis
     glLineWidth(3);
@@ -379,9 +501,9 @@ void Axis::draw_obj()
     glPointSize(1);
 
     // restore default settings
-    glPopMatrix();
+    //glPopMatrix();
     glEnable(GL_LIGHTING);
-    glDepthFunc(GL_LEQUAL);
+    //glDepthFunc(GL_LEQUAL);
 }
 
 void Path::draw_obj()

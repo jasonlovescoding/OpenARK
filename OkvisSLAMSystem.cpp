@@ -43,7 +43,7 @@ namespace ark {
     }
 
     void OkvisSLAMSystem::FrameConsumerLoop() {
-        while (true) {
+        while (!kill) {
             //Get processed frame data from OKVIS
             StampedFrameData frame_data;
             while (!frame_data_queue_.try_dequeue(&frame_data)) {
@@ -137,8 +137,15 @@ namespace ark {
 
             out_frame->keyframe_ = sparseMap_.getKeyframe(out_frame->keyframeId_);
 
-
             //Notify callbacks
+            if(frame_data.data->is_keyframe){
+                for (MapKeyFrameAvailableHandler::const_iterator callback_iter = mMapKeyFrameAvailableHandler.begin();
+                    callback_iter != mMapKeyFrameAvailableHandler.end(); ++callback_iter) {
+                    const MapKeyFrameAvailableHandler::value_type& pair = *callback_iter;
+                    pair.second(out_frame);
+                }
+            }
+
             for (MapFrameAvailableHandler::const_iterator callback_iter = mMapFrameAvailableHandler.begin();
                 callback_iter != mMapFrameAvailableHandler.end(); ++callback_iter) {
                 const MapFrameAvailableHandler::value_type& pair = *callback_iter;

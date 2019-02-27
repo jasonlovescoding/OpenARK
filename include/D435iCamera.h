@@ -5,6 +5,7 @@
 #include <librealsense2/rs.hpp>
 #include <thread>
 #include "concurrency.h"
+#include <atomic>
 
 // OpenARK Libraries
 #include "CameraSetup.h"
@@ -45,7 +46,6 @@ namespace ark {
          * Sets the external hardware sync ans starts the camera
          */
         void start() override;
-
         /**
         * Gets the new frame from the sensor (implements functionality).
         * Updates xyzMap and ir_map.
@@ -79,5 +79,6 @@ namespace ark {
         float imu_rate;
         int width, height;
         bool badInputFlag;
+        std::atomic<bool> kill;
     };
 }

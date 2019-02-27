@@ -10,7 +10,7 @@
 /** RealSense SDK2 Cross-Platform Depth Camera Backend **/
 namespace ark {
     D435iCamera::D435iCamera():
-        last_ts_g(0) {
+        last_ts_g(0), kill(false) {
         //Setup camera
         //TODO: Make read from config file
         rs2::context ctx;
@@ -33,6 +33,8 @@ namespace ark {
 
     D435iCamera::~D435iCamera() {
         try {
+            kill=true;
+            imuReaderThread_.join();
             pipe->stop();
             if(depth_sensor){
                 delete depth_sensor;
@@ -60,7 +62,7 @@ namespace ark {
     }
 
     void D435iCamera::imuReader(){
-        while(true){
+        while(!kill){
             auto frames = motion_pipe->wait_for_frames();
             auto fa = frames.first(RS2_STREAM_ACCEL, RS2_FORMAT_MOTION_XYZ32F)
                 .as<rs2::motion_frame>();
