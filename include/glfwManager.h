@@ -50,6 +50,11 @@ public:
 
 	void add_control_func(GLFWkeyfun controls);
 
+	void set_pos(int x, int y){
+		glfwSetWindowPos(win_ptr,x,y);
+
+	}
+
 	virtual void keyboard_control()
 	{
 	    if(glfwGetKey(win_ptr, GLFW_KEY_ESCAPE) == GLFW_PRESS)
@@ -84,7 +89,10 @@ public:
 	ObjectWindow(name,resX,resY),
 	image_format_(image_format),
 	data_type_(data_type),
-	cube_num(0){
+	cube_num(0),
+	near_cut_(near_cut),
+	far_cut_(far_cut),
+	px_(px),py_(py),cx_(cx),cy_(cy){
 		proj_mat_=Eigen::Matrix4d::Zero();
 		/*proj_mat_(0,0)=px/cx;
 		proj_mat_(1,1)=py/cy;
@@ -122,6 +130,9 @@ private:
 	GLenum image_format_;
 	GLenum data_type_;
 	int cube_num;
+	double near_cut_;
+	double far_cut_;
+	double px_,py_,cx_,cy_;
 
 
 

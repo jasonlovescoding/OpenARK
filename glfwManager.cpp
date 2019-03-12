@@ -232,6 +232,15 @@ bool ARCameraWindow::display(){
         int width = current_image.cols;
         int elem_size = current_image.elemSize();
         int stride = current_image.step/elem_size;
+
+        proj_mat_(0,0)=2*px_/width;
+        proj_mat_(1,1)=2*py_/height;
+        proj_mat_(2,0)=2*cx_/width-1.0;
+        proj_mat_(2,1)=2*cy_/height-1.0;
+        proj_mat_(2,2)=(near_cut_+far_cut_)/(near_cut_-far_cut_);
+        proj_mat_(2,3)=2*far_cut_*near_cut_/(near_cut_-far_cut_);
+        proj_mat_(3,2)=-1;
+
         glPixelStorei(GL_UNPACK_ROW_LENGTH,stride);
 
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, stride, height, 0, image_format_, data_type_, current_image.ptr());
@@ -249,9 +258,9 @@ bool ARCameraWindow::display(){
         glEnable(GL_TEXTURE_2D);
         glBegin(GL_QUADS);
         glTexCoord2f(0, 0); glVertex2f(0,    0   );
-        glTexCoord2f(1, 0); glVertex2f(0+width, 0   );
-        glTexCoord2f(1, 1); glVertex2f(0+width, 0+height);
-        glTexCoord2f(0, 1); glVertex2f(0,    0+height);
+        glTexCoord2f(1, 0); glVertex2f(0+windowWidth, 0   );
+        glTexCoord2f(1, 1); glVertex2f(0+windowWidth, 0+windowHeight);
+        glTexCoord2f(0, 1); glVertex2f(0,    0+windowHeight);
         glEnd();
         glDisable(GL_TEXTURE_2D);
         //glBindTexture(GL_TEXTURE_2D, 0);  

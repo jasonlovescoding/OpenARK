@@ -60,8 +60,10 @@ int main(int argc, char **argv)
 
     //Window for displaying the path
     //PoseViewer poseViewer;
-    MyGUI::CameraWindow traj_win("Traj Viewer", 640,480);
-    MyGUI::ARCameraWindow ar_win("AR Viewer", 640,480, GL_LUMINANCE, GL_UNSIGNED_BYTE, 3.84299896e+02, 3.84299896e+02, 3.22548157e+02, 2.36944305e+02,0.01,100);
+    MyGUI::CameraWindow traj_win("Traj Viewer", 640*2,480*2);
+    MyGUI::ARCameraWindow ar_win("AR Viewer", 640*2.5,480*2.5, GL_LUMINANCE, GL_UNSIGNED_BYTE, 3.84299896e+02, 3.84299896e+02, 3.22548157e+02, 2.36944305e+02,0.01,100);
+    traj_win.set_pos(640*2.5,100);
+    ar_win.set_pos(0,100);
     MyGUI::Path path1("path1", Eigen::Vector3d(1, 0, 0));
     MyGUI::Axis axis1("axis1", .1);
     MyGUI::Axis axis2("axis2", 1);
