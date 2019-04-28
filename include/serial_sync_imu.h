@@ -231,8 +231,11 @@ namespace ark {
                 }
             }
 
-            //close(port_);
-            CloseHandle(port_);
+            #ifdef _WIN32
+                CloseHandle(port_);
+            #else
+                close(port_);
+            #endif
 
         }
 

@@ -82,7 +82,7 @@ namespace ark {
                 // Get accelerometer measures
                 rs2_vector accel_data = fa.get_motion_data();
 
-                ImuPair imu_out { double(ts_g)*1e7, //convert to nanoseconds, for some reason gyro timestamp is in centiseconds
+                ImuPair imu_out { double(ts_g)*1e6, //convert to nanoseconds, for some reason gyro timestamp is in centiseconds
                     Eigen::Vector3d(gyro_data.x,gyro_data.y,gyro_data.z),
                     Eigen::Vector3d(accel_data.x,accel_data.y,accel_data.z)};
                 imu_queue_.enqueue(imu_out);

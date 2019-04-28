@@ -52,6 +52,9 @@ endif ( CMAKE_COMPILER_IS_GNUCXX )
 set( Boost_USE_STATIC_LIBS ON )
 set( Boost_USE_STATIC ON )
 
+find_package(OpenGL)
+find_package(GLUT)
+
 find_package( PCL REQUIRED )
 
 find_package( OpenCV REQUIRED )
@@ -60,24 +63,25 @@ if( OpenCV_FOUND )
 endif( OpenCV_FOUND )
 
 if(BUILD_SLAM_DEMO)
-  # require Okvis
-  find_package( Okvis 1.1 REQUIRED )
-  include_directories(${OKVIS_INCLUDE_DIRS})
-  message(STATUS "Found Okvis: ${OKVIS_INCLUDE_DIRS}")
 
-  # require glog (should come with Okvis)
+  # require Okvis
+  find_package( okvis 1.1 REQUIRED )
+  include_directories(${OKVIS_INCLUDE_DIRS})
+  message(STATUS "Found okvis: ${OKVIS_INCLUDE_DIRS}")
+
+  # require Glog (should come with Okvis)
   find_package( Glog REQUIRED )
   include_directories(${GLOG_INCLUDE_DIRS})
   message(STATUS "Found Glog: ${GLOG_LIBRARIES}")
 
   # require OpenGV (should come with Okvis)
-  find_package( OpenGV REQUIRED )
-  message(STATUS "Found OpenGV: ${OPENGV_INCLUDE_DIRS}")
+  #find_package( OpenGV REQUIRED )
+  #message(STATUS "Found OpenGV: ${OPENGV_INCLUDE_DIRS}")
 
   # require Brisk
-  find_package( Brisk 2 REQUIRED )
+  find_package( brisk 2 REQUIRED )
   include_directories(${BRISK_INCLUDE_DIRS})
-  message(STATUS "Found Brisk: ${BRISK_INCLUDE_DIRS}")
+  message(STATUS "Found brisk: ${BRISK_INCLUDE_DIRS}")
 
   # require DBoW2
   find_package( DBoW2 REQUIRED )
@@ -107,16 +111,24 @@ if(BUILD_SLAM_DEMO)
      SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
   endif()
 
+  #find_package( Eigen REQUIRED )
+  #include_directories(${EIGEN_INCLUDE_DIR}) 
+  #message(STATUS "Eigen found: ${EIGEN_INCLUDE_DIR}")
+
+
+  #add_definitions(-DEIGEN_DONT_ALIGN_STATICALLY)
+  #add_definitions(-DEIGEN_DONT_VECTORIZE)
   set(
     DEPENDENCIES
     ${Dlib_LIBRARIES}
     ${DBoW2_LIBRARIES}
     ${BRISK_LIBRARIES}
-    ${OPENGV_LIBRARIES}
+   # ${OPENGV_LIBRARIES}
     ${GLOG_LIBRARIES}
     ${OPENGL_LIBRARIES}
     ${OKVIS_LIBRARIES}
     ${CERES_LIBRARIES}
+    #${EIGEN_LIBRARIES}
   )
   
 endif(BUILD_SLAM_DEMO)
