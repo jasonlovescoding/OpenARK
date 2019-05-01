@@ -19,6 +19,7 @@ set( LIB_NAME "OpenARK" )
 set( DEMO_NAME "OpenARK_hand_demo" )
 set( AVATAR_DEMO_NAME "OpenARK_avatar_demo")
 set( SLAM_DEMO_NAME "OpenARK_SLAM_demo")
+set( RECON_DEMO_NAME "OpenARK_Recon_demo")
 set( DATA_RECORDING_NAME "OpenARK_data_recording")
 set( TEST_NAME "OpenARK_test" )
 set( UNITY_PLUGIN_NAME "UnityPlugin" )
@@ -26,6 +27,7 @@ set( UNITY_PLUGIN_NAME "UnityPlugin" )
 option( BUILD_DEMO "BUILD_DEMO" ON )
 option( BUILD_AVATAR_DEMO "BUILD_AVATAR_DEMO" OFF)
 option( BUILD_SLAM_DEMO "BUILD_SLAM_DEMO" ON)
+option( BUILD_RECON_DEMO "BUILD_RECON_DEMO" ON)
 option( BUILD_DATA_RECORDING "BUILD_DATA_RECORDING" OFF)
 option( BUILD_TESTS "BUILD_TESTS" OFF )
 option( BUILD_UNITY_PLUGIN "BUILD_UNITY_PLUGIN" ON )
@@ -133,6 +135,9 @@ if(BUILD_SLAM_DEMO)
   
 endif(BUILD_SLAM_DEMO)
 
+if(BUILD_RECON_DEMO)
+
+endif(BUILD_RECON_DEMO)
 
 set( realsense2_FOUND OFF )
 if( USE_realsense2 )
@@ -195,6 +200,7 @@ set(
   glfwManager.cpp
   OkvisSLAMSystem.cpp
   D435iCamera.cpp
+  SaveFrame.cpp
 )
 
 set(
@@ -222,6 +228,7 @@ set(
   ${INCLUDE_DIR}/concurrency.h
   ${INCLUDE_DIR}/D435iCamera.h
   ${INCLUDE_DIR}/CameraSetup.h
+  ${INCLUDE_DIR}/SaveFrame.h
   stdafx.h
 )
 
@@ -345,6 +352,13 @@ if( ${BUILD_SLAM_DEMO} )
     set_target_properties( ${SLAM_DEMO_NAME} PROPERTIES COMPILE_FLAGS ${TARGET_COMPILE_FLAGS} )
 endif( ${BUILD_SLAM_DEMO} )
 
+if( ${BUILD_RECON_DEMO} )
+    add_executable( ${RECON_DEMO_NAME} ReconDemo435i.cpp )
+    target_include_directories( ${RECON_DEMO_NAME} PRIVATE ${INCLUDE_DIR} )
+    target_link_libraries( ${RECON_DEMO_NAME} ${DEPENDENCIES} ${LIB_NAME} glut)
+    #set_target_properties( ${RECON_DEMO_NAME} PROPERTIES OUTPUT_NAME ${LIB_NAME} )
+    set_target_properties( ${RECON_DEMO_NAME} PROPERTIES COMPILE_FLAGS ${TARGET_COMPILE_FLAGS} )
+endif( ${BUILD_SLAM_DEMO} )
 
 if( ${BUILD_DATA_RECORDING} )
     add_executable( ${DATA_RECORDING_NAME} DataRecording.cpp )

@@ -202,6 +202,57 @@ void ObjectWindow::add_object(Object* obj){
 	obj->windows[name_] = this;
 }
 	
+void draw_origin(float length) {
+    glDisable(GL_LIGHTING);
+    // glLineWidth(1.0f);
+    glColor3f(1.0f, 1.0f, 1.0f);
+
+    glBegin(GL_LINES);
+
+    glVertex3f(0.f,0.f,0.f);
+    glVertex3f(length,0.f,0.f);
+
+    glVertex3f(0.f,0.f,0.f);
+    glVertex3f(0.f,length,0.f);
+    
+    glVertex3f(0.f,0.f,0.f);
+    glVertex3f(0.f,0.f,length);
+
+    glEnd();
+    glEnable(GL_LIGHTING);
+}
+
+bool ReconWindow::display(){
+    if(win_ptr == NULL)
+        return false;
+    if(!glfwWindowShouldClose(win_ptr)){
+        glfwMakeContextCurrent(win_ptr);
+        GLint windowWidth, windowHeight;
+        glfwGetFramebufferSize(win_ptr, &windowWidth, &windowHeight);
+        glViewport(0, 0, windowWidth, windowHeight);
+
+        // Draw stuff
+        glClearColor(0.0, 0.0, 0.0, 1.0);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+        glMatrixMode(GL_MODELVIEW_MATRIX);
+
+        gluLookAt(0,0,3, // eye 
+        0,0,0,  // center   
+        0.0, 1.0, 0.);      // up direction
+
+        draw_origin(0.4);
+
+        glMatrixMode(GL_PROJECTION_MATRIX);
+        glLoadIdentity();
+
+        gluPerspective( 45, (double)windowHeight / (double)windowWidth, .01, 100 );
+
+        // Update Screen
+        glfwSwapBuffers(win_ptr);
+        return true;
+    }
+}
 
 bool ARCameraWindow::display(){
     if(win_ptr==NULL)

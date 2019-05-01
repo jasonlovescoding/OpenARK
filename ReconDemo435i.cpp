@@ -6,7 +6,184 @@
 #include <thread>
 #include "glfwManager.h"
 
+#include <GL/glut.h>
+#include <opencv2/opencv.hpp>
+#include <sys/types.h>
+#include <sys/stat.h>
+
 using namespace ark;
+using namespace cv;
+using namespace std;
+
+//OpenGL global variable
+float window_width = 800;
+float window_height = 800;
+float xRot = 15.0f;
+float yRot = 0.0f;
+float xTrans = 0.0;
+float yTrans = 0;
+float zTrans = -35.0;
+int ox;
+int oy;
+int buttonState;
+float xRotLength = 0.0f;
+float yRotLength = 0.0f;
+bool wireframe = false;
+bool stop = false;
+thread *app;
+
+void display_func() {
+    glEnable(GL_POINT_SMOOTH);
+    glEnable(GL_DEPTH_TEST);
+    glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+    if (wireframe)
+        glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+    else
+        glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+
+    glPushMatrix();
+
+    if (buttonState == 1) {
+        xRot += (xRotLength - xRot) * 0.1f;
+        yRot += (yRotLength - yRot) * 0.1f;
+    }
+
+    glTranslatef(xTrans, yTrans, zTrans);
+    glRotatef(xRot, 1.0f, 0.0f, 0.0f);
+    glRotatef(yRot, 0.0f, 1.0f, 0.0f);
+
+    // pointCloudGenerator->Render();
+
+    glPopMatrix();
+    glutSwapBuffers();
+
+}
+
+void idle_func() {
+    glutPostRedisplay();
+}
+
+void reshape_func(GLint width, GLint height) {
+    window_width = width;
+    window_height = height;
+
+    glViewport(0, 0, width, height);
+    glMatrixMode(GL_PROJECTION);
+    glLoadIdentity();
+
+    gluPerspective(45.0, (float) width / height, 0.001, 100.0);
+
+    glMatrixMode(GL_MODELVIEW);
+    glLoadIdentity();
+    glTranslatef(0.0f, 0.0f, -3.0f);
+}
+
+void application_thread() {
+    // slam->Start();
+    // pointCloudGenerator->Start();
+    // bridgeRSD435->Start();
+
+    // Main loop
+    int tframe = 1;
+
+    // while (!slam->IsRunning()) {
+    //     cv::Mat imBGR, imD;
+    //     cv::Mat imRGB;
+
+    //     bridgeRSD435->GrabRGBDPair(imBGR, imD);
+
+    //     cv::cvtColor(imBGR, imRGB, cv::COLOR_BGR2RGB);
+
+    //     imBGR.release();
+
+    //     // Pass the image to the SLAM system
+    //     slam->PushFrame(imRGB, imD, tframe);
+    // }
+}
+
+void keyboard_func(unsigned char key, int x, int y) {
+    if (key == ' ') {
+        if (!stop) {
+            app = new thread(application_thread);
+            app = new thread(application_thread);
+            stop = !stop;
+        } else {
+            // slam->RequestStop();
+            // updateKeyFrames();
+            // pointCloudGenerator->RequestStop();
+            // bridgeRSD435->Stop();
+        }
+    }
+
+    if (key == 'w') {
+        zTrans += 0.3f;
+    }
+
+    if (key == 's') {
+        zTrans -= 0.3f;
+    }
+
+    if (key == 'a') {
+        xTrans += 0.3f;
+    }
+
+    if (key == 'd') {
+        xTrans -= 0.3f;
+    }
+
+    if (key == 'q') {
+        yTrans -= 0.3f;
+    }
+
+    if (key == 'e') {
+        yTrans += 0.3f;
+    }
+
+    if (key == 'p') {
+        // slam->RequestStop();
+        // pointCloudGenerator->RequestStop();
+        // bridgeRSD435->Stop();
+        // updateKeyFrames();
+        // pointCloudGenerator->SavePly();
+    }
+
+    if (key == 'v')
+        wireframe = !wireframe;
+
+
+    glutPostRedisplay();
+}
+
+void mouse_func(int button, int state, int x, int y) {
+    if (state == GLUT_DOWN) {
+        buttonState = 1;
+    } else if (state == GLUT_UP) {
+        buttonState = 0;
+    }
+
+    ox = x;
+    oy = y;
+
+    glutPostRedisplay();
+}
+
+void motion_func(int x, int y) {
+    float dx, dy;
+    dx = (float) (x - ox);
+    dy = (float) (y - oy);
+
+    if (buttonState == 1) {
+        xRotLength += dy / 5.0f;
+        yRotLength += dx / 5.0f;
+    }
+
+    ox = x;
+    oy = y;
+
+    glutPostRedisplay();
+}
 
 int main(int argc, char **argv)
 {
@@ -61,7 +238,8 @@ int main(int argc, char **argv)
 
     //Window for displaying the path
     //PoseViewer poseViewer;
-    MyGUI::CameraWindow traj_win("Traj Viewer", 640*2,480*2);
+    MyGUI::ReconWindow recon_win("Reconstruction Viewer", 800, 800);
+    MyGUI::CameraWindow traj_win("Traj Viewer", 600,600);
     MyGUI::ARCameraWindow ar_win("AR Viewer", 640*2.5,480*2.5, GL_LUMINANCE, GL_UNSIGNED_BYTE, 3.84299896e+02, 3.84299896e+02, 3.22548157e+02, 2.36944305e+02,0.01,100);
     traj_win.set_pos(640*2.5,100);
     ar_win.set_pos(0,100);
@@ -73,6 +251,7 @@ int main(int argc, char **argv)
     traj_win.add_object(&axis1);
     traj_win.add_object(&axis2);
     traj_win.add_object(&grid1);
+    recon_win.add_object(&grid1);
     ar_win.add_object(&axis1);
 
     //Create saveFrame. It stores key frames into timestamp, RGB image, depth image folders
@@ -157,6 +336,25 @@ int main(int argc, char **argv)
     //run until display is closed
     okvis::Time start(0.0);
     int id =0;
+
+    //glut window
+
+    // glutInit(&argc, argv);
+    // glutInitDisplayMode(GLUT_RGBA | GLUT_DOUBLE);
+    // glutInitWindowSize(window_width, window_height);
+    // (void) glutCreateWindow("GLUT Program");
+
+    // init();
+
+    // glutSetWindowTitle("OpenARK 3D Reconstruction");
+    // glutDisplayFunc(display_func);
+    // glutReshapeFunc(reshape_func);
+    // glutIdleFunc(idle_func);
+    // glutMouseFunc(mouse_func);
+    // glutMotionFunc(motion_func);
+    // glutKeyboardFunc(keyboard_func);
+    // glutMainLoop();
+
     while (MyGUI::Manager::running()){
         //printf("test\n");
         //Update the display

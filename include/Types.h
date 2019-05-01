@@ -186,8 +186,11 @@ namespace ark{
         bool getImageByType(FrameType type, cv::Mat& out, int num=0 ){
             int found =0;
             for(size_t i=0; i<images_.size(); i++){
+                std::cout << "Type: " << images_[i].type() << std::endl;
+
                 if(image_types_[i] == type){
                     if(found==num){
+                        std::cout << "FOUND!!!!" << std::endl;
                         out = images_[i];
                         return true;
                     }else{
@@ -205,6 +208,21 @@ namespace ark{
             }
             return false;
         }
+
+        bool getRGBDFrame(RGBDFrame& rgbdframe){
+            // std::cout<<" getRGBDFrame "<<std::endl;
+            images_[3].copyTo(rgbdframe.imRGB);
+            images_[2].copyTo(rgbdframe.imDepth);
+            Eigen::Matrix4d tcw = T_WS();
+            cv::Mat twc =cv::Mat::eye(4,4,CV_32FC1);
+            for(int c = 0; c < 4; c ++){
+                for(int r = 0; r < 4; r ++){
+                    twc.at<float>(r,c) = tcw(r,c);
+                }
+            }
+            rgbdframe.mTcw = twc.inv();
+        }
+
 
         /** Transformation matrix of the sensor body in keyframe coordinates 
          ** This may be Identity if transforms not available

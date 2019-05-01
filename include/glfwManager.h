@@ -169,6 +169,16 @@ public:
 	}
 };
 
+class ReconWindow : public ObjectWindow{
+
+public:
+
+	ReconWindow(std::string name, int resX, int resY):
+	ObjectWindow(name,resX,resY){}
+	bool display() override;
+
+};
+
 class ImageWindow : public Window{
 public:
 	cv::Mat current_image;
@@ -192,7 +202,7 @@ public:
 
 };
 
-
+ 
 class Object{
 public:
 	std::map<std::string,ObjectWindow*> windows;

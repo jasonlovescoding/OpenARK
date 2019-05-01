@@ -10,7 +10,7 @@
 /** RealSense SDK2 Cross-Platform Depth Camera Backend **/
 namespace ark {
     D435iCamera::D435iCamera():
-        last_ts_g(0), kill(false) {
+        last_ts_g(0), kill(false), align(RS2_STREAM_COLOR) {
         //Setup camera
         //TODO: Make read from config file
         rs2::context ctx;
@@ -21,6 +21,7 @@ namespace ark {
         config.enable_stream(RS2_STREAM_DEPTH,-1,width, height,RS2_FORMAT_Z16,30);
         config.enable_stream(RS2_STREAM_INFRARED, 1, width, height, RS2_FORMAT_Y8, 30);
         config.enable_stream(RS2_STREAM_INFRARED, 2, width, height, RS2_FORMAT_Y8, 30);
+        config.enable_stream(RS2_STREAM_COLOR, width, height, RS2_FORMAT_BGR8, 30);
         motion_config.enable_stream(RS2_STREAM_ACCEL, RS2_FORMAT_MOTION_XYZ32F,250);
         motion_config.enable_stream(RS2_STREAM_GYRO, RS2_FORMAT_MOTION_XYZ32F,200);
         imu_rate=200; //setting imu_rate to be the gyro rate since we are using the gyro timestamps
@@ -119,13 +120,17 @@ namespace ark {
 
         try {
             // Ensure the frame has space for all images
-            frame.images_.resize(3);
+            frame.images_.resize(4);
 
             // Get frames from camera
             auto frames = pipe->wait_for_frames();
             auto infrared = frames.get_infrared_frame(1);        
             auto infrared2 = frames.get_infrared_frame(2);
-            auto depth = frames.get_depth_frame();
+            // auto depth = frames.get_depth_frame();
+            // auto color = frames.get_color_frame();
+            auto processed = align.process(frames);
+            auto depth = processed.get_depth_frame();
+            auto color = processed.first(RS2_STREAM_COLOR);
 
             // Store ID for later
             frame.frameId_ = depth.get_frame_number();
@@ -147,6 +152,9 @@ namespace ark {
             if (frame.images_[2].empty()) frame.images_[2] = cv::Mat(cv::Size(width,height), CV_32FC3);
             project(depth, frame.images_[2]);
             frame.images_[2] = frame.images_[2]*scale; //depth is in mm by default
+
+            if (frame.images_[3].empty()) frame.images_[3] = cv::Mat(cv::Size(width,height), CV_8UC3);
+            std::memcpy(frame.images_[3].data, color.get_data(), 3 * width * height);
 
 
         } catch (std::runtime_error e) {

@@ -74,6 +74,8 @@ namespace ark {
         std::thread imuReaderThread_;
         single_consumer_queue<ImuPair> imu_queue_;
 
+        rs2::align align;
+
         double scale;
         double last_ts_g;
         float imu_rate;
