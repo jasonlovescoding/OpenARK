@@ -10,7 +10,7 @@
 /** RealSense SDK2 Cross-Platform Depth Camera Backend **/
 namespace ark {
     D435iCamera::D435iCamera():
-        last_ts_g(0), kill(false), align(RS2_STREAM_COLOR) {
+        last_ts_g(0), kill(false), align(RS2_STREAM_DEPTH) {
         //Setup camera
         //TODO: Make read from config file
         rs2::context ctx;
@@ -21,7 +21,7 @@ namespace ark {
         config.enable_stream(RS2_STREAM_DEPTH,-1,width, height,RS2_FORMAT_Z16,30);
         config.enable_stream(RS2_STREAM_INFRARED, 1, width, height, RS2_FORMAT_Y8, 30);
         config.enable_stream(RS2_STREAM_INFRARED, 2, width, height, RS2_FORMAT_Y8, 30);
-        config.enable_stream(RS2_STREAM_COLOR, width, height, RS2_FORMAT_BGR8, 30);
+        config.enable_stream(RS2_STREAM_COLOR, width, height, RS2_FORMAT_RGB8, 30);
         motion_config.enable_stream(RS2_STREAM_ACCEL, RS2_FORMAT_MOTION_XYZ32F,250);
         motion_config.enable_stream(RS2_STREAM_GYRO, RS2_FORMAT_MOTION_XYZ32F,200);
         imu_rate=200; //setting imu_rate to be the gyro rate since we are using the gyro timestamps
@@ -129,8 +129,9 @@ namespace ark {
             // auto depth = frames.get_depth_frame();
             // auto color = frames.get_color_frame();
             auto processed = align.process(frames);
-            auto depth = processed.get_depth_frame();
-            auto color = processed.first(RS2_STREAM_COLOR);
+            auto depth = processed.first(RS2_STREAM_DEPTH);
+            auto color = processed.get_color_frame();
+            
 
             // Store ID for later
             frame.frameId_ = depth.get_frame_number();

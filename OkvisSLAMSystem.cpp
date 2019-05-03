@@ -250,7 +250,7 @@ namespace ark {
         return okvis_estimator_ == nullptr;
     }
 
-    void OkvisSLAMSystem::getTrajectory(std::vector<Eigen::Matrix4d>& trajOut){
+    void OkvisSLAMSystem::getTrajectory(std::vector<MapKeyFrame::Ptr>& trajOut){
         sparseMap_.getTrajectory(trajOut);
     }
 

@@ -185,6 +185,30 @@ void motion_func(int x, int y) {
     glutPostRedisplay();
 }
 
+
+void updateKeyFrames(std::vector<MapKeyFrame::Ptr> frames) {
+
+    cout << "writing updated poses" << endl;
+
+    for (MapKeyFrame::Ptr kframe: frames) {
+
+        Eigen::Matrix4d tcw = kframe->T_WS();
+        cv::Mat twc =cv::Mat::eye(4,4,CV_32FC1);
+        for(int c = 0; c < 4; c ++){
+            for(int r = 0; r < 4; r ++){
+                twc.at<float>(r,c) = tcw(r,c);
+            }
+        }
+
+        cv::FileStorage fs("./frames/tcw_loop/" + to_string(kframe->frameId_) + ".txt",cv::FileStorage::WRITE);
+        fs << "tcw" << twc.inv();
+        fs.release();
+    }
+
+    cout << "finished writing updated poses" << endl;
+
+}
+
 int main(int argc, char **argv)
 {
 
@@ -266,7 +290,7 @@ int main(int argc, char **argv)
         //increment count
         std::cout << "key frame: " << count << std::endl;
         RGBDFrame rgbdframe;
-        rgbdframe.frameId = count;
+        rgbdframe.frameId = frame->frameId_;
         frame->getRGBDFrame(rgbdframe);
 
 
@@ -314,6 +338,7 @@ int main(int argc, char **argv)
     slam.AddKeyFrameAvailableHandler(key_handler, "saving");
 
     //Recieves output from SLAM system and displays to the screen
+    std::cout<< "normal frame" << std::endl;
     FrameAvailableHandler handler([&path1, &axis2, &ar_win](MultiCameraFrame::Ptr frame) {
         Eigen::Affine3d transform(frame->T_WS());
         path1.add_node(transform.translation());
@@ -325,12 +350,15 @@ int main(int argc, char **argv)
     slam.AddFrameAvailableHandler(handler, "mapping");
 
     LoopClosureDetectedHandler loopHandler([&slam, &path1](void) {
-        std::vector<Eigen::Matrix4d> traj;
+        std::cout << "loop closure dete"
+        std::vector<MapKeyFrame::Ptr> traj;
         slam.getTrajectory(traj);
         path1.clear();
         for(size_t i=0; i<traj.size(); i++){
-            path1.add_node(traj[i].block<3,1>(0,3));
+            path1.add_node(traj[i]->T_WS().block<3,1>(0,3));
         }
+        updateKeyFrames(traj);
+
     });
     slam.AddLoopClosureDetectedHandler(loopHandler,"trajectoryUpdate");
     //run until display is closed

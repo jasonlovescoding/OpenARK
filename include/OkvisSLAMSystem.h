@@ -58,7 +58,7 @@ namespace ark {
 
         void display();
 
-        void getTrajectory(std::vector<Eigen::Matrix4d>& trajOut);
+        void getTrajectory(std::vector<MapKeyFrame::Ptr>& trajOut);
 
         ~OkvisSLAMSystem();
 

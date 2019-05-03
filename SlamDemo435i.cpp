@@ -146,11 +146,11 @@ int main(int argc, char **argv)
     slam.AddFrameAvailableHandler(handler, "mapping");
 
     LoopClosureDetectedHandler loopHandler([&slam, &path1](void) {
-        std::vector<Eigen::Matrix4d> traj;
+        std::vector<MapKeyFrame::Ptr> traj;
         slam.getTrajectory(traj);
         path1.clear();
         for(size_t i=0; i<traj.size(); i++){
-            path1.add_node(traj[i].block<3,1>(0,3));
+            path1.add_node(traj[i]->T_WS().block<3,1>(0,3));
         }
     });
     slam.AddLoopClosureDetectedHandler(loopHandler,"trajectoryUpdate");
