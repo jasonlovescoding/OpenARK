@@ -350,7 +350,6 @@ int main(int argc, char **argv)
     slam.AddFrameAvailableHandler(handler, "mapping");
 
     LoopClosureDetectedHandler loopHandler([&slam, &path1](void) {
-        std::cout << "loop closure dete"
         std::vector<MapKeyFrame::Ptr> traj;
         slam.getTrajectory(traj);
         path1.clear();

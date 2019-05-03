@@ -10,7 +10,7 @@
 /** RealSense SDK2 Cross-Platform Depth Camera Backend **/
 namespace ark {
     D435iCamera::D435iCamera():
-        last_ts_g(0), kill(false), align(RS2_STREAM_DEPTH) {
+        last_ts_g(0), kill(false), align(RS2_STREAM_COLOR) {
         //Setup camera
         //TODO: Make read from config file
         rs2::context ctx;
@@ -126,12 +126,11 @@ namespace ark {
             auto frames = pipe->wait_for_frames();
             auto infrared = frames.get_infrared_frame(1);        
             auto infrared2 = frames.get_infrared_frame(2);
-            // auto depth = frames.get_depth_frame();
-            // auto color = frames.get_color_frame();
             auto processed = align.process(frames);
-            auto depth = processed.first(RS2_STREAM_DEPTH);
-            auto color = processed.get_color_frame();
-            
+            auto color = processed.first(RS2_STREAM_COLOR);
+            //auto depth = processed.first(RS2_STREAM_DEPTH);
+            //auto color = processed.get_color_frame();
+            auto depth = frames.get_depth_frame();            
 
             // Store ID for later
             frame.frameId_ = depth.get_frame_number();
