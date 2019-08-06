@@ -201,6 +201,10 @@ set(
   OkvisSLAMSystem.cpp
   D435iCamera.cpp
   SaveFrame.cpp
+  icp.cpp
+  icpPointToPlane.cpp
+  matrix.cpp
+  kdtree.cpp
 )
 
 set(
@@ -229,6 +233,10 @@ set(
   ${INCLUDE_DIR}/D435iCamera.h
   ${INCLUDE_DIR}/CameraSetup.h
   ${INCLUDE_DIR}/SaveFrame.h
+  ${INCLUDE_DIR}/icp.h
+  ${INCLUDE_DIR}/icpPointToPlane.h
+  ${INCLUDE_DIR}/kdtree.h
+  ${INCLUDE_DIR}/matrix.h
   stdafx.h
 )
 

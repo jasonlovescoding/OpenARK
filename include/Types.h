@@ -119,6 +119,7 @@ namespace ark{
          ** A cv::Mat of all descriptors is kept for each image */
         std::vector<std::vector<cv::KeyPoint > > keypoints_; 
         std::vector<cv::Mat> descriptors_;
+        cv::Mat pointcloud;
         /** Estimated 3D feature positions of all keypoints in each image */
         std::vector<std::vector<Eigen::Vector4d > > keypoints3dh_C;
         /** ID of the previous keyframe (may be -1 if not available) */

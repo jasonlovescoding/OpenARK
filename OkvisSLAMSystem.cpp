@@ -1,5 +1,6 @@
 #include "stdafx.h"
 #include "OkvisSLAMSystem.h"
+#include "icpPointToPlane.h"
 
 namespace ark {
 
@@ -124,6 +125,22 @@ namespace ark {
                     keyframe->descriptors_[cam_idx]=frame_data.data->descriptors[cam_idx];
                 }
 
+                // record depth map
+                cv::Mat keycloud;
+                cv::Mat A = frame.images[2];
+                // downsample the depth map to achieve real-time performance
+                for (int i = 0; i < A.rows; i+=3) {
+                    for (int j = 0; j < A.cols; j+=3) {
+                        if (A.at<cv::Vec3f>(i, j)[0] > 0.001 || A.at<cv::Vec3f>(i, j)[1] > 0.001 || A.at<cv::Vec3f>(i, j)[2] > 0.001 ) {
+                            cv::Mat row(1, 3, CV_64F);
+                            row.at<double>(0,0) = (double) 1000 * A.at<cv::Vec3f>(i, j)[0]; 
+                            row.at<double>(0,1) = (double) 1000 * A.at<cv::Vec3f>(i, j)[1]; 
+                            row.at<double>(0,2) = (double) 1000 * A.at<cv::Vec3f>(i, j)[2]; 
+                            keycloud.push_back(row);
+                        }
+                    }
+                }
+                keyframe->pointcloud = keycloud;
 
                 // push to map
                 if(sparseMap_.addKeyframe(keyframe)){ //add keyframe returns true if a loop closure was detected
@@ -136,7 +153,42 @@ namespace ark {
             }
 
             out_frame->keyframe_ = sparseMap_.getKeyframe(out_frame->keyframeId_);
-
+            static double prev_t_s = -1;
+            const double INTERVAL = 10;
+            // TODO: find appropriate interval for stationary camera
+            // TODO: only translation now, add ICP-aligned rotation 
+            if ((frame_data.data->speedAndBiases[0] < 0.1) && (frame_data.data->speedAndBiases[1] < 0.1) &&
+                (frame_data.data->speedAndBiases[2] < 0.1) && (frame_data.data->keypoints[0].size() >= 15)) {
+                if (prev_t_s > 0 && (out_frame->timestamp_ - prev_t_s > INTERVAL)) {
+                    cv::Mat A = out_frame->images_[2];
+                    cv::Mat T;
+                    // downsample the depth map to achieve real-time performance
+                    for (int i = 0; i < A.rows; i+=3) {
+                        for (int j = 0; j < A.cols; j+=3) {
+                            if (A.at<cv::Vec3f>(i, j)[0] > 0.001 || A.at<cv::Vec3f>(i, j)[1] > 0.001 || A.at<cv::Vec3f>(i, j)[2] > 0.001 ) {
+                                cv::Mat row(1, 3, CV_64F);
+                                row.at<double>(0,0) = (double) 1000 * A.at<cv::Vec3f>(i, j)[0]; 
+                                row.at<double>(0,1) = (double) 1000 * A.at<cv::Vec3f>(i, j)[1]; 
+                                row.at<double>(0,2) = (double) 1000 * A.at<cv::Vec3f>(i, j)[2]; 
+                                T.push_back(row);
+                            }
+                        }
+                    }
+                    Matrix R = Matrix::eye(3);
+                    Matrix t(3, 1);
+                    IcpPointToPlane icp((double*)out_frame->keyframe_->pointcloud.data, out_frame->keyframe_->pointcloud.rows, 3);
+                    double residual = icp.fit((double*)T.data, T.rows, R, t, -1);
+                    prev_t_s = out_frame->timestamp_;
+                    std::cout << t << std::endl;
+                    out_frame->T_KS_(0, 0) = t.val[0][0] / 1000;
+                    out_frame->T_KS_(1, 0) = t.val[1][0] / 1000;
+                    out_frame->T_KS_(2, 0) = t.val[2][0] / 1000;
+                } else if (prev_t_s < 0) {
+                    prev_t_s = out_frame->timestamp_;
+                } 
+            } else {
+                prev_t_s = -1;
+            }
             //Notify callbacks
             if(frame_data.data->is_keyframe){
                 for (MapKeyFrameAvailableHandler::const_iterator callback_iter = mMapKeyFrameAvailableHandler.begin();
